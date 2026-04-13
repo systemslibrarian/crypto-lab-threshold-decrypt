@@ -100,6 +100,11 @@ const render = (): void => {
         ${
           state.dkg
             ? `<p class="meta">Group public key: <span class="mono">${short(state.dkg.groupPublicKeyHex)}</span></p>
+               <div class="distribution">
+                 ${state.dkg.partyShares
+                   .map((s) => `<span class="node">P${s.id}</span>`)
+                   .join('')}
+               </div>
                <div class="tokens">${state.dkg.partyShares
                  .map((s) => `<span class="token">P${s.id}: ${short(s.publicShareHex, 10)}</span>`)
                  .join('')}</div>`
