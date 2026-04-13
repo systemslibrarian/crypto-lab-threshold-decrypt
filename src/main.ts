@@ -88,14 +88,14 @@ const render = (): void => {
         <h2>Exhibit 1 - Distributed Key Generation</h2>
         <p>Five parties each generate polynomial contributions. Shares are combined without any trusted dealer.</p>
         <div class="grid controls">
-          <label>Party count
-            <input id="participants" type="range" min="3" max="8" value="${state.participants}" />
+          <label for="participants">Party count <span class="sr-only">(${state.participants})</span>
+            <input id="participants" type="range" min="3" max="8" value="${state.participants}" aria-valuenow="${state.participants}" aria-valuemin="3" aria-valuemax="8" />
           </label>
-          <label>Threshold slider
-            <input id="threshold" type="range" min="2" max="${state.participants}" value="${state.threshold}" />
+          <label for="threshold">Threshold <span class="sr-only">(${state.threshold})</span>
+            <input id="threshold" type="range" min="2" max="${state.participants}" value="${state.threshold}" aria-valuenow="${state.threshold}" aria-valuemin="2" aria-valuemax="${state.participants}" />
           </label>
         </div>
-        <p class="meta">n = ${state.participants}, t = ${state.threshold}</p>
+        <p class="meta" aria-live="polite">n = ${state.participants}, t = ${state.threshold}</p>
         <button id="run-dkg" ${state.busy ? 'disabled' : ''}>Run distributed key generation</button>
         ${
           state.dkg
@@ -115,8 +115,8 @@ const render = (): void => {
       <section class="panel">
         <h2>Exhibit 2 - Encryption</h2>
         <p>Alice encrypts to the group public key. Any single party trying to decrypt alone fails.</p>
-        <label>Message
-          <input id="message" type="text" value="${state.message}" />
+        <label for="message">Message
+          <input id="message" type="text" value="${state.message}" autocomplete="off" />
         </label>
         <div class="actions">
           <button id="encrypt" ${!canEncrypt || state.busy ? 'disabled' : ''}>Encrypt to group</button>
@@ -138,14 +138,14 @@ const render = (): void => {
           <button id="verify-proofs" ${state.partials.length === 0 || state.busy ? 'disabled' : ''}>Verify NIZK proofs</button>
           <button id="inject-cheat" ${state.partials.length === 0 || state.busy ? 'disabled' : ''}>Inject cheating partial</button>
         </div>
-        <div class="tokens">
+        <div class="tokens" role="status" aria-live="polite" aria-label="Partial decryption status">
           ${
             state.partials.length === 0
               ? '<span class="token">No partial decryptions yet</span>'
               : state.partials
                   .map((p) => {
                     const ok = state.verification[p.participantId];
-                    return `<span class="token ${ok ? 'ok' : 'warn'}">P${p.participantId} ${ok ? 'verified' : 'unverified'}</span>`;
+                    return `<span class="token ${ok ? 'ok' : 'warn'}" aria-label="Party ${p.participantId} ${ok ? 'verified' : 'unverified'}">P${p.participantId} ${ok ? 'verified' : 'unverified'}</span>`;
                   })
                   .join('')
           }
@@ -166,11 +166,13 @@ const render = (): void => {
           <button id="combine-good" ${verified.length < state.threshold || state.busy ? 'disabled' : ''}>Combine t partial decryptions</button>
           <button id="combine-bad" ${verified.length < state.threshold || state.busy ? 'disabled' : ''}>Try with t-1 partial decryptions</button>
         </div>
-        ${state.decryptOutcome ? `<p class="meta good">Recovered plaintext: ${state.decryptOutcome}</p>` : ''}
-        ${state.decryptError ? `<p class="meta bad">${state.decryptError}</p>` : ''}
+        <div aria-live="polite">
+          ${state.decryptOutcome ? `<p class="meta good">Recovered plaintext: ${state.decryptOutcome}</p>` : ''}
+          ${state.decryptError ? `<p class="meta bad">${state.decryptError}</p>` : ''}
+        </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" aria-label="Real world comparison">
         <h2>Exhibit 5 - Real World + Structural Parallel</h2>
         <p>${comparison.structuralParallel}</p>
         <ul>
