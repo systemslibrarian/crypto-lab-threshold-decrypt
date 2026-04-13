@@ -58,6 +58,14 @@ export type ThresholdComparison = {
   deployments: string[];
 };
 
+export type ThresholdFailureAnalysis = {
+  cooperatingParties: number;
+  compromisedParties: number;
+  canDecrypt: boolean;
+  singlePointOfFailureRemoved: boolean;
+  summary: string;
+};
+
 const G = p256.Point.BASE;
 
 const evalPolynomial = (coefficients: bigint[], x: bigint): bigint => {
@@ -240,3 +248,24 @@ export const buildThresholdComparison = (
     'Trusted-third-party replacement designs that remove single-holder decryption agents ("Trent").'
   ]
 });
+
+export const analyzeThresholdFailure = (
+  threshold: number,
+  participants: number,
+  cooperatingParties: number,
+  compromisedParties: number
+): ThresholdFailureAnalysis => {
+  const canDecrypt = cooperatingParties >= threshold;
+  const singlePointOfFailureRemoved = threshold > 1 && compromisedParties < threshold;
+  const summary = canDecrypt
+    ? `Threshold met: ${cooperatingParties} of ${participants} parties can decrypt.`
+    : `Threshold not met: ${cooperatingParties} of ${participants} parties cannot decrypt.`;
+
+  return {
+    cooperatingParties,
+    compromisedParties,
+    canDecrypt,
+    singlePointOfFailureRemoved,
+    summary
+  };
+};
