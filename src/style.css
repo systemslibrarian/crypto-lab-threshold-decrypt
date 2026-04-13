@@ -1,0 +1,73 @@
+:root {
+  --ink: #e6ecff;
+  --muted: #aab4da;
+  --paper: #0f162b;
+  --card: rgba(26, 38, 73, 0.82);
+  --line: rgba(141, 178, 255, 0.32);
+  --brand: #63e6be;
+  --brand-soft: #bcf2df;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(80% 70% at 50% -20%, rgba(69, 164, 255, 0.26), transparent),
+    linear-gradient(145deg, #0b1022, #0f162b 60%, #111a34);
+}
+
+#app {
+  width: min(980px, 94vw);
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.hero,
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--card);
+  backdrop-filter: blur(10px);
+  padding: 1.25rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+h1 {
+  margin: 0.45rem 0 0.55rem;
+  line-height: 1.05;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  color: var(--brand-soft);
+}
+
+h2 {
+  margin: 0 0 0.4rem;
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
