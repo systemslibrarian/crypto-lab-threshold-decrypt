@@ -13,7 +13,17 @@ This demo shows threshold decryption where a ciphertext encrypted with `encryptT
 
 ## Live Demo
 https://systemslibrarian.github.io/crypto-lab-threshold-decrypt/
-The demo lets you adjust party count and the threshold slider, run distributed key generation, encrypt a message, and walk through partial decryption steps. You can verify each NIZK proof before combining shares, test a cheating partial decryption rejection, and compare successful `t`-share recovery against `t-1` failure.
+The demo lets you adjust party count and the threshold slider, run distributed key generation, and encrypt a message. You then generate each party's partial decryption, verify its Chaum-Pedersen NIZK proof, and inject a tampered partial to watch verification reject it. In the combination step you pick a cooperating set against a live quorum meter and attempt recovery — `t` valid partials reconstruct the plaintext while `t-1` (or any set containing a rejected partial) fails. A final security panel models how many compromised parties it takes to break confidentiality for the configured `t-of-n`.
+
+## Verification
+The cryptographic core is covered by a Vitest suite (`npm test`) that exercises the ElGamal/AES-GCM round trip, Chaum-Pedersen proof acceptance and rejection, Shamir/Lagrange reconstruction, Feldman-VSS key generation, and the full `t`-of-`n` decryption path — plus a happy-dom UI smoke test of the demo wiring. The same suite runs in CI on every push before deployment.
+
+```bash
+npm install
+npm test        # run the test suite
+npm run dev     # serve the demo locally
+npm run build   # type-check and produce the production bundle
+```
 
 ## What Can Go Wrong
 - Invalid share verification flow: if implementations skip `verifyPartialDecryption`, malformed or malicious partial decryptions can be accepted and break recovery correctness.

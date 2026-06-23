@@ -145,7 +145,7 @@ export const runDistributedKeyGeneration = (config: ThresholdConfig): DkgResult 
   const dealers: DealerContribution[] = [];
 
   for (let dealerId = 1; dealerId <= config.participants; dealerId += 1) {
-    const coefficients = Array.from({ length: config.threshold }, (_, i) => (i === 0 ? randomScalar() : randomScalar()));
+    const coefficients = Array.from({ length: config.threshold }, () => randomScalar());
     const commitments = coefficients.map((coef) => G.multiply(coef));
 
     const shares: Share[] = [];
@@ -210,6 +210,54 @@ export const combinePartialDecryptions = (
   }, p256.Point.ZERO);
 
   return pointToHex(shared);
+};
+
+export type CombinationContribution = {
+  id: number;
+  lambdaHex: string;
+  partialHex: string;
+  weightedHex: string;
+};
+
+export type CombinationBreakdown = {
+  ids: number[];
+  contributions: CombinationContribution[];
+  recoveredHex: string;
+};
+
+const scalarToHex = (value: bigint): string => modN(value).toString(16).padStart(64, '0');
+
+/**
+ * Decomposes the threshold combination so the UI can show the actual math:
+ * the recovered shared point is the sum of each party's Lagrange-weighted partial,
+ * Σ λ_i · D_i, where the λ_i are the Lagrange basis coefficients evaluated at 0.
+ */
+export const explainCombination = (
+  partials: PartialDecryption[],
+  threshold: number
+): CombinationBreakdown => {
+  if (partials.length < threshold) {
+    throw new Error(`need at least ${threshold} partial decryptions`);
+  }
+
+  const picked = partials.slice(0, threshold);
+  const ids = picked.map((p) => p.participantId);
+
+  let acc = p256.Point.ZERO;
+  const contributions = picked.map((p) => {
+    const lambda = lagrangeCoefficientAtZero(p.participantId, ids);
+    const partial = pointFromHex(p.sharePointHex);
+    const weighted = partial.multiply(lambda);
+    acc = acc.add(weighted);
+    return {
+      id: p.participantId,
+      lambdaHex: scalarToHex(lambda),
+      partialHex: pointToHex(partial),
+      weightedHex: pointToHex(weighted)
+    };
+  });
+
+  return { ids, contributions, recoveredHex: pointToHex(acc) };
 };
 
 export const thresholdDecryptCiphertext = async (
