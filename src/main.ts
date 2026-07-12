@@ -156,12 +156,17 @@ const render = (): void => {
     <main class="shell" role="main" id="main-content">
       <header class="hero">
         <button id="theme-toggle" class="theme-toggle" type="button"></button>
-        <p class="eyebrow">systemslibrarian · crypto-lab</p>
-        <h1>crypto-lab-threshold-decrypt</h1>
-        <p>
-          Interactive threshold decryption with distributed key generation, verifiable partial decryptions,
-          and t-of-n plaintext recovery over real P-256 arithmetic — no single party ever holds the key.
-        </p>
+        <div class="cl-hero">
+          <div class="cl-hero-main">
+            <h1 class="cl-hero-title">Threshold Decryption</h1>
+            <p class="cl-hero-sub">t-of-n · P-256 ElGamal · Shamir/Feldman · NIZK partials</p>
+            <p class="cl-hero-desc">Run distributed key generation, then watch any t of n parties jointly decrypt by Lagrange-combining their NIZK-verified partial decryptions.</p>
+          </div>
+          <aside class="cl-hero-why" aria-label="Why it matters">
+            <span class="cl-hero-why-label">WHY IT MATTERS</span>
+            <p class="cl-hero-why-text">No single party ever holds the decryption key, so no lone insider or stolen laptop can read the data. Requiring a quorum removes single points of failure while any t-1 colluding parties still learn nothing.</p>
+          </aside>
+        </div>
         <ol class="steps" aria-label="Demo progress">${stepsHtml}</ol>
       </header>
 
