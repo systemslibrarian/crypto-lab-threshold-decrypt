@@ -1,12 +1,14 @@
 import './style.css';
 import {
+  checkPartialDecryption,
   createPartialDecryptionWithProof,
   decryptWithSharedPoint,
   encryptToGroupPublicKey,
-  verifyPartialDecryption,
+  type ChaumPedersenChecks,
   type GroupCiphertext,
   type PartialDecryption
 } from './elgamal';
+import { freeCurves, makeShamirDemo, sampleCurve, type SharePoint } from './shamirviz';
 import {
   analyzeThresholdFailure,
   buildThresholdComparison,
@@ -23,15 +25,32 @@ type ThemeMode = 'dark' | 'light';
 
 type Recovery = { ok: boolean; title: string; detail: string };
 
+// Exhibit 0: a small live Shamir polynomial the learner can probe. Its `secret`,
+// degree, and share points are real (same construction the P-256 pipeline uses,
+// just tiny integers so the curve is human-readable). `revealed` is the set of
+// share x-values the learner has toggled on.
+type ShamirViz = {
+  secret: number;
+  coeffs: number[];
+  shares: SharePoint[];
+  revealed: Set<number>;
+};
+
+// Per-party Chaum-Pedersen equation checks, populated when "Verify NIZK proofs"
+// runs so Exhibit 3 can show which of the three equalities holds/fails.
+type ProofChecks = Record<number, ChaumPedersenChecks>;
+
 type State = {
   participants: number;
   threshold: number;
   message: string;
   dkg: DkgResult | null;
+  dealerMode: 'dkg' | 'trusted';
   ciphertext: GroupCiphertext | null;
   partials: PartialDecryption[];
   tamperedId: number | null;
   verification: Record<number, boolean>;
+  proofChecks: ProofChecks;
   verified: boolean;
   cooperating: Set<number>;
   compromised: number;
@@ -39,6 +58,12 @@ type State = {
   breakdown: CombinationBreakdown | null;
   soloResult: string | null;
   busy: boolean;
+  viz: ShamirViz;
+};
+
+const buildViz = (secret: number, threshold: number, participants: number): ShamirViz => {
+  const { coeffs, shares } = makeShamirDemo(secret, threshold, participants);
+  return { secret, coeffs, shares, revealed: new Set<number>() };
 };
 
 const initialState = (): State => ({
@@ -46,17 +71,20 @@ const initialState = (): State => ({
   threshold: 3,
   message: 'Vault release condition met.',
   dkg: null,
+  dealerMode: 'dkg',
   ciphertext: null,
   partials: [],
   tamperedId: null,
   verification: {},
+  proofChecks: {},
   verified: false,
   cooperating: new Set<number>(),
   compromised: 1,
   recovery: null,
   breakdown: null,
   soloResult: null,
-  busy: false
+  busy: false,
+  viz: buildViz(11, 3, 5)
 });
 
 let state: State = initialState();
@@ -66,12 +94,21 @@ let state: State = initialState();
 // re-running DKG and whenever the scheme is changed after keys already exist —
 // the old shares no longer match a new (n, t), so they must be discarded.
 const resetPipeline = (): void => {
-  const { participants, threshold, message, compromised } = state;
+  const { participants, threshold, message, compromised, dealerMode, viz } = state;
   state = initialState();
   state.participants = participants;
   state.threshold = threshold;
   state.message = message;
   state.compromised = compromised;
+  state.dealerMode = dealerMode;
+  state.viz = viz; // the Exhibit 0 illustration is independent of the live pipeline
+};
+
+// Rebuilds the Exhibit 0 illustration to a fresh secret + polynomial matching the
+// current (t, n). Called when the learner changes the scheme or asks for a reroll.
+const rebuildViz = (): void => {
+  const t = Math.min(state.threshold, state.participants);
+  state.viz = buildViz(3 + Math.floor(Math.random() * 15), t, state.participants);
 };
 
 const short = (value: string, size = 18): string =>
@@ -107,6 +144,212 @@ const stepState = () => {
   const generated = encrypted && state.partials.length > 0;
   const recovered = state.recovery?.ok === true;
   return { keys, encrypted, generated, recovered };
+};
+
+// An accessible inline "what is this?" disclosure. Native <details>/<summary> so
+// it works without JS, is keyboard-operable, and exposes its expanded state to
+// assistive tech. The term stays visible; the plain-language gloss is one click away.
+let glossSeq = 0;
+const gloss = (term: string, plain: string): string => {
+  const id = `gloss-${(glossSeq += 1)}`;
+  return `<span class="gloss"><details><summary aria-describedby="${id}">${escapeHtml(
+    term
+  )}<span class="gloss-hint" aria-hidden="true">?</span></summary><span id="${id}" class="gloss-body">${escapeHtml(
+    plain
+  )}</span></details></span>`;
+};
+
+// ---- Exhibit 0: Shamir polynomial SVG ---------------------------------------
+// Renders the (secret) degree-(t-1) curve, a dot per party share, and — depending
+// on how many dots the learner has revealed — either the unique fitted curve
+// (t dots ⇒ one curve, secret pinned at x=0) or a fan of equally-valid curves
+// (t-1 or fewer dots ⇒ intercept is free). All curves are computed by real
+// Lagrange interpolation in shamirviz.ts; nothing here is faked.
+const VIZ = { w: 420, h: 260, padX: 34, padTop: 18, padBot: 26 };
+
+const renderShamirSvg = (): string => {
+  const { viz, threshold } = state;
+  const t = Math.min(threshold, viz.shares.length);
+  const parties = viz.shares.length;
+  const revealedShares = viz.shares.filter((s) => viz.revealed.has(s.x));
+
+  const xMin = 0;
+  const xMax = parties + 0.5;
+  // y-range spans the true curve plus the free-curve fan so nothing clips.
+  const trueCurve = sampleCurve(
+    viz.shares.slice(0, t),
+    xMin,
+    xMax,
+    60
+  );
+  const revealedCount = revealedShares.length;
+  const belowThreshold = revealedCount > 0 && revealedCount < t;
+  // Distinct candidate intercepts for the "free" fan, centered near the real secret.
+  const fan = belowThreshold
+    ? freeCurves(
+        revealedShares,
+        t,
+        [viz.secret, viz.secret + 6, viz.secret - 5, viz.secret + 12],
+        xMin,
+        xMax,
+        60
+      )
+    : [];
+
+  const ys = [
+    ...trueCurve.map((p) => p.y),
+    ...viz.shares.map((p) => p.y),
+    ...fan.flatMap((c) => c.samples.map((p) => p.y)),
+    viz.secret
+  ];
+  let yMin = Math.min(...ys);
+  let yMax = Math.max(...ys);
+  if (yMax - yMin < 4) {
+    yMax += 2;
+    yMin -= 2;
+  }
+  const padY = (yMax - yMin) * 0.12;
+  yMin -= padY;
+  yMax += padY;
+
+  const sx = (x: number): number =>
+    VIZ.padX + ((x - xMin) / (xMax - xMin)) * (VIZ.w - VIZ.padX - 10);
+  const sy = (y: number): number =>
+    VIZ.padTop + ((yMax - y) / (yMax - yMin)) * (VIZ.h - VIZ.padTop - VIZ.padBot);
+
+  const path = (pts: SharePoint[]): string =>
+    pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)} ${sy(p.y).toFixed(1)}`)
+      .join(' ');
+
+  const axisY = sy(0) >= VIZ.padTop && sy(0) <= VIZ.h - VIZ.padBot ? sy(0) : null;
+  const x0 = sx(0);
+
+  // The secret marker at x=0 only becomes "pinned" once t dots are revealed.
+  const pinned = revealedCount >= t;
+  const secretY = sy(viz.secret);
+
+  const fanPaths = fan
+    .map(
+      (c, i) =>
+        `<path class="viz-free" d="${path(c.samples)}" style="animation-delay:${i * 90}ms" />`
+    )
+    .join('');
+
+  const dots = viz.shares
+    .map((s) => {
+      const on = viz.revealed.has(s.x);
+      return `<circle class="viz-dot ${on ? 'on' : 'off'}" cx="${sx(s.x).toFixed(1)}" cy="${sy(
+        s.y
+      ).toFixed(1)}" r="${on ? 6 : 4.5}" />
+        <text class="viz-dot-label" x="${sx(s.x).toFixed(1)}" y="${(sy(s.y) - 10).toFixed(
+          1
+        )}" text-anchor="middle">P${s.x}</text>`;
+    })
+    .join('');
+
+  return `<svg class="viz-svg" viewBox="0 0 ${VIZ.w} ${VIZ.h}" role="img"
+      aria-label="${
+        pinned
+          ? `Exactly ${t} shares revealed: one degree ${t - 1} curve fits them and pins the secret ${viz.secret} at x equals 0.`
+          : belowThreshold
+            ? `${revealedCount} of ${t} shares revealed: many curves pass through them, each hitting a different y-intercept, so the secret stays undetermined.`
+            : `A secret polynomial of degree ${t - 1}; reveal ${t} of its ${parties} share points to pin the secret.`
+      }">
+      <line class="viz-axis" x1="${x0.toFixed(1)}" y1="${VIZ.padTop}" x2="${x0.toFixed(1)}" y2="${
+        VIZ.h - VIZ.padBot
+      }" />
+      ${
+        axisY !== null
+          ? `<line class="viz-axis" x1="${VIZ.padX}" y1="${axisY.toFixed(1)}" x2="${
+              VIZ.w - 10
+            }" y2="${axisY.toFixed(1)}" />`
+          : ''
+      }
+      <text class="viz-axis-label" x="${(x0 + 4).toFixed(1)}" y="${VIZ.h - VIZ.padBot + 16}">x=0 (secret)</text>
+      ${fanPaths}
+      ${
+        !belowThreshold
+          ? `<path class="viz-true ${pinned ? 'pinned' : 'hint'}" d="${path(trueCurve)}" />`
+          : ''
+      }
+      ${
+        pinned
+          ? `<circle class="viz-secret" cx="${x0.toFixed(1)}" cy="${secretY.toFixed(1)}" r="6" />
+             <text class="viz-secret-label" x="${(x0 + 10).toFixed(1)}" y="${(secretY + 16).toFixed(
+               1
+             )}">secret = ${viz.secret}</text>`
+          : ''
+      }
+      ${dots}
+    </svg>`;
+};
+
+const shamirCaption = (): string => {
+  const { viz, threshold } = state;
+  const t = Math.min(threshold, viz.shares.length);
+  const revealed = viz.shares.filter((s) => viz.revealed.has(s.x)).length;
+  if (revealed >= t) {
+    return `<span class="good">${revealed} shares reveal exactly one curve.</span> A degree-${
+      t - 1
+    } polynomial is pinned down by ${t} points, so its value at x=0 — the secret — is forced to <strong>${viz.secret}</strong>. This is why any ${t} parties can decrypt.`;
+  }
+  if (revealed > 0) {
+    return `<span class="bad">${revealed} of ${t} shares fixes nothing.</span> Fewer than ${t} points leave the curve free: every dashed line here passes through your revealed dots yet crosses x=0 at a different value, so the secret could be anything. This is exactly why ${t}-1 parties learn nothing.`;
+  }
+  return `Reveal share dots below. With <strong>${t}</strong> of them, one curve fits and the secret at x=0 is forced; with fewer, infinitely many curves fit and the secret stays hidden.`;
+};
+
+// ---- Exhibit 3: Chaum-Pedersen equation checks ------------------------------
+// Shows, per party, the three tests a verifier runs and a ✓/✗ on each. Populated
+// from real checkPartialDecryption results, so the tampered partial visibly fails
+// the exact equation whose response byte was flipped (g^s = a1·y^c).
+const CP_EQUATIONS: { key: keyof ChaumPedersenChecks; label: string }[] = [
+  { key: 'challengeMatches', label: 'c = H(transcript) — challenge recomputed from the proof' },
+  { key: 'firstEquation', label: 'g^s = a1 · y^c — response opens the public key y' },
+  { key: 'secondEquation', label: 'c1^s = a2 · d^c — same s opens d against base c1' }
+];
+
+const renderProofChecks = (): string => {
+  const entries = state.partials
+    .map((p) => [p.participantId, state.proofChecks[p.participantId]] as const)
+    .filter((e): e is readonly [number, ChaumPedersenChecks] => e[1] !== undefined);
+  if (entries.length === 0) {
+    return '';
+  }
+  const mark = (ok: boolean): string =>
+    ok
+      ? '<span class="cp-mark ok" aria-hidden="true">✓</span>'
+      : '<span class="cp-mark no" aria-hidden="true">✕</span>';
+
+  const rows = entries
+    .map(([id, checks]) => {
+      const eqs = CP_EQUATIONS.map((eq) => {
+        const ok = checks[eq.key];
+        return `<li class="cp-eq ${ok ? 'ok' : 'no'}">${mark(ok)}<span>${escapeHtml(
+          eq.label
+        )}</span><span class="sr-only"> — ${ok ? 'holds' : 'fails'}</span></li>`;
+      }).join('');
+      const verdict = checks.valid
+        ? '<span class="good">accepted</span>'
+        : '<span class="bad">rejected</span>';
+      return `<div class="cp-party ${checks.valid ? 'ok' : 'no'}">
+        <div class="cp-party-head">Party ${id}: ${verdict}</div>
+        <ul class="cp-eqs">${eqs}</ul>
+      </div>`;
+    })
+    .join('');
+
+  const tamperedNote =
+    state.tamperedId !== null
+      ? `<p class="meta">Party ${state.tamperedId}&rsquo;s response byte was flipped, so <span class="mono">g^s</span> no longer equals <span class="mono">a1·y^c</span>: the first equation fails and the whole proof is rejected. The challenge still matches because the transcript points were untouched — the forgery can&rsquo;t survive both equations at once.</p>`
+      : '';
+
+  return `<div class="cp-checks" role="group" aria-label="Chaum-Pedersen verification breakdown">
+    <p class="meta">All three must hold for a partial to be accepted:</p>
+    ${rows}
+    ${tamperedNote}
+  </div>`;
 };
 
 const render = (): void => {
@@ -170,9 +413,61 @@ const render = (): void => {
         <ol class="steps" aria-label="Demo progress">${stepsHtml}</ol>
       </header>
 
+      <section class="panel" aria-label="Secret sharing intuition">
+        <h2>Exhibit 0 — Why t Points Pin a Secret</h2>
+        <p>Before any hex blobs: a <strong>share is a point on a hidden curve</strong>. Secret sharing hides a number (the secret) as the height of a random polynomial at x=0, and hands each party one point on that curve. A degree-${
+          Math.min(state.threshold, state.viz.shares.length) - 1
+        } curve needs exactly ${Math.min(
+          state.threshold,
+          state.viz.shares.length
+        )} points to be pinned down — reveal that many and the secret is forced; reveal fewer and it could be anything.</p>
+        <div class="viz-wrap" tabindex="0" role="region" aria-label="Interactive secret-sharing polynomial plot">
+          ${renderShamirSvg()}
+        </div>
+        <p class="meta viz-caption" aria-live="polite">${shamirCaption()}</p>
+        <div class="chooser" role="group" aria-label="Reveal share points">
+          ${state.viz.shares
+            .map((s) => {
+              const on = state.viz.revealed.has(s.x);
+              return `<button class="chip ${on ? 'picked' : ''}" type="button" data-viz-share="${
+                s.x
+              }" aria-pressed="${on}" aria-label="Share point P${s.x}, ${
+                on ? 'revealed' : 'hidden'
+              }">P${s.x}${on ? '<span class="chip-mark" aria-hidden="true">●</span>' : ''}</button>`;
+            })
+            .join('')}
+          <button id="viz-reveal-t" class="ghost" type="button">Reveal exactly ${Math.min(
+            state.threshold,
+            state.viz.shares.length
+          )}</button>
+          <button id="viz-reveal-less" class="ghost" type="button">Reveal ${
+            Math.min(state.threshold, state.viz.shares.length) - 1
+          } (one short)</button>
+          <button id="viz-reroll" class="ghost" type="button">New secret</button>
+        </div>
+        <p class="meta">This is the same construction the real pipeline below runs — a random degree-(t-1) polynomial whose constant term is the secret — only with tiny integers so the curve is visible. The production version runs the identical algebra modulo the P-256 group order (≈2²⁵⁶), where the "curve" lives in a space too large to draw but obeys the same t-points rule.</p>
+      </section>
+
       <section class="panel">
         <h2>Exhibit 1 — Distributed Key Generation ${badge(steps.keys)}</h2>
-        <p>Every party runs a Feldman-VSS dealer. Shares combine into one group key with no trusted dealer and no party holding the secret.</p>
+        <p>Every party runs a ${gloss(
+          'Feldman-VSS dealer',
+          'Each party picks its own secret polynomial and hands out points on it, plus commitments that let receivers check a share is genuine without learning the secret. VSS = verifiable secret sharing.'
+        )}. Shares combine into one group key via ${gloss(
+          'DKG',
+          'Distributed key generation: the group key is built with no trusted dealer — every party contributes, shares are summed, and nobody ever sees the whole private key.'
+        )}, so no party holds the secret.</p>
+        <div class="dealer-toggle" role="group" aria-label="Key setup model">
+          <button class="chip ${state.dealerMode === 'trusted' ? 'picked' : ''}" type="button"
+            data-dealer="trusted" aria-pressed="${state.dealerMode === 'trusted'}">Naive: one trusted dealer</button>
+          <button class="chip ${state.dealerMode === 'dkg' ? 'picked' : ''}" type="button"
+            data-dealer="dkg" aria-pressed="${state.dealerMode === 'dkg'}">DKG: no trusted dealer</button>
+        </div>
+        <p class="meta ${state.dealerMode === 'trusted' ? 'bad' : 'good'}" aria-live="polite">${
+          state.dealerMode === 'trusted'
+            ? 'Naive Shamir: one dealer generates the whole key, splits it, and mails out shares — but that dealer held the entire key and could keep a copy. The single point of failure just moved to the dealer.'
+            : 'DKG: every party is its own dealer. Each party&rsquo;s share is the SUM of the points it received from all parties, so the full key is only ever implied by a quorum and is never assembled anywhere.'
+        }</p>
         <div class="grid controls">
           <label for="participants"><span class="label-row">Party count <span class="val">${state.participants}</span></span>
             <input id="participants" type="range" min="3" max="8" value="${state.participants}"
@@ -199,7 +494,8 @@ const render = (): void => {
                </div>
                <div class="tokens">${state.dkg.partyShares
                  .map((s) => `<span class="token">P${s.id} · ${short(s.publicShareHex, 8)}</span>`)
-                 .join('')}</div>`
+                 .join('')}</div>
+               <p class="meta">Each token is party i&rsquo;s <em>public</em> share (g^share). Its private share is the sum of the ${state.dkg.dealers.length} points it received — one from every party&rsquo;s Feldman dealer — so no token, and no party, encodes the full key.</p>`
             : '<p class="meta">No party has the full private key; each holds only a share.</p>'
         }
       </section>
@@ -225,7 +521,13 @@ const render = (): void => {
 
       <section class="panel ${canPartial ? '' : 'locked'}">
         <h2>Exhibit 3 — Partial Decryption + NIZK Proofs ${badge(state.verified && state.tamperedId === null)}</h2>
-        <p>Each party emits a partial decryption with a Chaum-Pedersen proof binding it to that party's public share — provably correct without revealing the share.</p>
+        <p>Each party computes a partial decryption d<sub>i</sub> = x<sub>i</sub>·c1 (its secret share times the ciphertext&rsquo;s c1) and attaches a ${gloss(
+          'Chaum-Pedersen proof',
+          'A proof that d_i was computed with the SAME secret share that sits behind the party&rsquo;s public key — without revealing the share itself.'
+        )}, a ${gloss(
+          'NIZK',
+          'Non-interactive zero-knowledge proof: convinces a verifier a statement is true while leaking nothing else, in a single message with no back-and-forth.'
+        )}. Verifying it needs only public values.</p>
         <div class="actions">
           <button id="generate-partials" ${!canPartial || state.busy ? 'disabled' : ''}>Generate partials</button>
           <button id="verify-proofs" class="ghost" ${state.partials.length === 0 || state.busy ? 'disabled' : ''}>Verify NIZK proofs</button>
@@ -252,6 +554,7 @@ const render = (): void => {
               ? '<p class="meta good" aria-live="polite">All proofs verified — every partial is provably correct.</p>'
               : ''
         }
+        ${state.verified ? renderProofChecks() : ''}
       </section>
 
       <section class="panel ${state.partials.length > 0 ? '' : 'locked'}">
@@ -415,6 +718,8 @@ const bind = (): void => {
     if (hadKeys) {
       resetPipeline();
     }
+    // Keep the Exhibit 0 plot in sync with the chosen (t, n).
+    rebuildViz();
     render();
   });
 
@@ -425,6 +730,7 @@ const bind = (): void => {
     if (hadKeys) {
       resetPipeline();
     }
+    rebuildViz();
     render();
   });
 
@@ -481,6 +787,7 @@ const bind = (): void => {
       state.ciphertext = await encryptToGroupPublicKey(state.dkg.groupPublicKeyHex, state.message);
       state.partials = [];
       state.verification = {};
+      state.proofChecks = {};
       state.verified = false;
       state.tamperedId = null;
       state.cooperating = new Set();
@@ -534,6 +841,7 @@ const bind = (): void => {
       }
       state.partials = out;
       state.verification = {};
+      state.proofChecks = {};
       state.verified = false;
       state.tamperedId = null;
       state.cooperating = new Set();
@@ -548,13 +856,23 @@ const bind = (): void => {
         return;
       }
       const next: Record<number, boolean> = {};
+      const checks: ProofChecks = {};
       for (const partial of state.partials) {
         const pub = state.dkg.partyShares.find((p) => p.id === partial.participantId);
-        next[partial.participantId] = pub
-          ? await verifyPartialDecryption(pub.publicShareHex, state.ciphertext.c1Hex, partial)
-          : false;
+        if (pub) {
+          const result = await checkPartialDecryption(
+            pub.publicShareHex,
+            state.ciphertext.c1Hex,
+            partial
+          );
+          checks[partial.participantId] = result;
+          next[partial.participantId] = result.valid;
+        } else {
+          next[partial.participantId] = false;
+        }
       }
       state.verification = next;
+      state.proofChecks = checks;
       state.verified = true;
     })
   );
@@ -578,6 +896,7 @@ const bind = (): void => {
     );
     state.tamperedId = target.participantId;
     state.verification = {};
+    state.proofChecks = {};
     state.verified = false;
     state.cooperating.delete(target.participantId);
     state.recovery = null;
@@ -598,6 +917,47 @@ const bind = (): void => {
       }
       state.recovery = null;
       state.breakdown = null;
+      render();
+    });
+  });
+
+  // Exhibit 0 — reveal/hide individual share dots on the polynomial plot.
+  document.querySelectorAll<HTMLButtonElement>('.chip[data-viz-share]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const x = Number.parseInt(chip.dataset.vizShare ?? '', 10);
+      if (Number.isNaN(x)) {
+        return;
+      }
+      if (state.viz.revealed.has(x)) {
+        state.viz.revealed.delete(x);
+      } else {
+        state.viz.revealed.add(x);
+      }
+      render();
+    });
+  });
+
+  document.querySelector<HTMLButtonElement>('#viz-reveal-t')?.addEventListener('click', () => {
+    const t = Math.min(state.threshold, state.viz.shares.length);
+    state.viz.revealed = new Set(state.viz.shares.slice(0, t).map((s) => s.x));
+    render();
+  });
+
+  document.querySelector<HTMLButtonElement>('#viz-reveal-less')?.addEventListener('click', () => {
+    const t = Math.min(state.threshold, state.viz.shares.length);
+    state.viz.revealed = new Set(state.viz.shares.slice(0, Math.max(0, t - 1)).map((s) => s.x));
+    render();
+  });
+
+  document.querySelector<HTMLButtonElement>('#viz-reroll')?.addEventListener('click', () => {
+    rebuildViz();
+    render();
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.dealer-toggle [data-dealer]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.dealer === 'trusted' ? 'trusted' : 'dkg';
+      state.dealerMode = mode;
       render();
     });
   });

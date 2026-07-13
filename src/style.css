@@ -597,6 +597,211 @@ ul {
   font-size: 0.88rem;
 }
 
+/* ---- Inline jargon glosses (native <details>) ---------------------------- */
+.gloss {
+  display: inline;
+}
+
+.gloss details {
+  display: inline;
+}
+
+.gloss summary {
+  display: inline;
+  cursor: pointer;
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  list-style: none;
+}
+
+.gloss summary::-webkit-details-marker {
+  display: none;
+}
+
+.gloss summary:hover {
+  color: var(--ink);
+}
+
+.gloss-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  margin-left: 0.2em;
+  border: 1px solid var(--brand);
+  border-radius: 50%;
+  font-size: 0.72em;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.gloss-body {
+  display: block;
+  margin: 0.35rem 0 0.15rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--brand);
+  border-radius: 0.4rem;
+  background: var(--good-soft);
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* ---- Exhibit 0: Shamir polynomial plot ----------------------------------- */
+.viz-wrap {
+  margin: 0.7rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper);
+  overflow-x: auto;
+}
+
+.viz-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.viz-axis {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.viz-axis-label,
+.viz-dot-label,
+.viz-secret-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.viz-secret-label {
+  fill: var(--good);
+  font-weight: 700;
+}
+
+.viz-true {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2.5;
+}
+
+.viz-true.hint {
+  stroke-dasharray: 2 5;
+  opacity: 0.75;
+}
+
+.viz-true.pinned {
+  stroke: var(--good);
+}
+
+.viz-free {
+  fill: none;
+  stroke: var(--bad);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  opacity: 0.85;
+  animation: rise 350ms ease both;
+}
+
+.viz-dot.off {
+  fill: var(--paper);
+  stroke: var(--muted);
+  stroke-width: 1.6;
+}
+
+.viz-dot.on {
+  fill: var(--brand);
+  stroke: var(--ink);
+  stroke-width: 1.2;
+}
+
+.viz-secret {
+  fill: var(--good);
+  stroke: var(--paper);
+  stroke-width: 1.5;
+}
+
+.viz-caption {
+  min-height: 2.4em;
+}
+
+/* ---- Exhibit 1: trusted-dealer contrast toggle --------------------------- */
+.dealer-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
+/* ---- Exhibit 3: Chaum-Pedersen equation checks --------------------------- */
+.cp-checks {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.cp-party {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--paper);
+}
+
+.cp-party.ok {
+  border-color: var(--good);
+}
+
+.cp-party.no {
+  border-color: var(--bad);
+}
+
+.cp-party-head {
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.35rem;
+}
+
+.cp-eqs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.cp-eq {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.4;
+}
+
+.cp-mark {
+  flex: 0 0 auto;
+  font-family: 'Segoe UI', sans-serif;
+  font-weight: 700;
+}
+
+.cp-mark.ok {
+  color: var(--good);
+}
+
+.cp-mark.no {
+  color: var(--bad);
+}
+
+.cp-eq.no span:not(.cp-mark) {
+  color: var(--bad);
+}
+
 @keyframes rise {
   from {
     opacity: 0;

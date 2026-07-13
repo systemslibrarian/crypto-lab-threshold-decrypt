@@ -3,6 +3,8 @@
 ## What It Is
 This demo shows threshold decryption where a ciphertext encrypted with `encryptToGroupPublicKey` can only be opened when enough participants cooperate. Keys are generated with `runDistributedKeyGeneration`, which produces Shamir-style secret shares so no single party holds the full decryption secret. Each party creates a partial decrypt with `createPartialDecryptionWithProof`, and each proof is checked by `verifyPartialDecryption` before combination. Recovery happens with `thresholdDecryptCiphertext`, which requires a `t-of-n` quorum and demonstrates removal of a single decryption point of failure.
 
+The demo opens with an interactive **"why t points pin a secret"** exhibit — a live Shamir polynomial you can probe by revealing share dots to *see* that exactly `t` points fix one curve (and its secret at `x=0`) while any `t-1` leave the secret free. That geometric idea is the heart of secret sharing; the panels below then run the real P-256 machinery on top of it. Heavy terms (Feldman-VSS, DKG, Chaum-Pedersen, NIZK) each carry an inline one-sentence plain-language gloss, so the vocabulary is taught rather than assumed.
+
 ## When to Use It
 - Use this when decryption authority must be shared across operators, because one compromised operator alone cannot decrypt.
 - Use this for quorum-based key custody, because the scheme enforces a configurable `t-of-n` threshold before plaintext recovery.
@@ -14,7 +16,7 @@ This demo shows threshold decryption where a ciphertext encrypted with `encryptT
 
 **[systemslibrarian.github.io/crypto-lab-threshold-decrypt](https://systemslibrarian.github.io/crypto-lab-threshold-decrypt/)**
 
-The demo lets you adjust party count and the threshold slider, run distributed key generation, and encrypt a message. You then generate each party's partial decryption, verify its Chaum-Pedersen NIZK proof, and inject a tampered partial to watch verification reject it. In the combination step you pick a cooperating set against a live quorum meter and attempt recovery — `t` valid partials reconstruct the plaintext while `t-1` (or any set containing a rejected partial) fails. A final security panel models how many compromised parties it takes to break confidentiality for the configured `t-of-n`.
+Start with **Exhibit 0**, the polynomial explorer: toggle share dots on and off and watch `t` points collapse the fan of candidate curves down to one (pinning the secret) while `t-1` leave a spread of equally-valid secrets. Then adjust party count and the threshold slider, and — before trusting the DKG — flip the **trusted-dealer vs. DKG** contrast to see what problem distributed key generation actually solves (a lone dealer who splits the key still held the whole key). Run distributed key generation, encrypt a message, then generate each party's partial decryption and verify its Chaum-Pedersen NIZK proof: the verifier shows all **three equalities** it checks with a ✓/✗ on each, so when you inject a tampered partial you see exactly which equation (`g^s = a1·y^c`) the forgery breaks. In the combination step you pick a cooperating set against a live quorum meter and attempt recovery — `t` valid partials reconstruct the plaintext while `t-1` (or any set containing a rejected partial) fails. A final security panel models how many compromised parties it takes to break confidentiality for the configured `t-of-n`.
 
 ## What Can Go Wrong
 - Invalid share verification flow: if implementations skip `verifyPartialDecryption`, malformed or malicious partial decryptions can be accepted and break recovery correctness.
@@ -46,7 +48,7 @@ npm run dev
 - [crypto-lab-elgamal-plain](https://systemslibrarian.github.io/crypto-lab-elgamal-plain/) — the base ElGamal scheme this demo runs in threshold form.
 
 ## Verification
-The cryptographic core is covered by a Vitest suite (`npm test`) that exercises the ElGamal/AES-GCM round trip, Chaum-Pedersen proof acceptance and rejection, Shamir/Lagrange reconstruction, Feldman-VSS key generation, and the full `t`-of-`n` decryption path — plus a happy-dom UI smoke test of the demo wiring. The same suite runs in CI on every push before deployment.
+The cryptographic core is covered by a Vitest suite (`npm test`) that exercises the ElGamal/AES-GCM round trip, Chaum-Pedersen proof acceptance and rejection (including the per-equation breakdown behind Exhibit 3), Shamir/Lagrange reconstruction, Feldman-VSS key generation, and the full `t`-of-`n` decryption path — plus a happy-dom UI smoke test of the demo wiring. The Exhibit 0 polynomial visualization runs the same Shamir construction over small integers and is separately tested to confirm `t` points reconstruct the exact secret while fewer admit distinct secrets. The same suite runs in CI on every push before deployment, alongside a strict axe-core WCAG 2.1 AA gate in both themes.
 
 ```bash
 npm install

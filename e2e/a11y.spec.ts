@@ -40,6 +40,12 @@ async function revealAll(page: Page): Promise<void> {
 
 // Run the full demo so every injected output region exists during the scan.
 async function drivePipeline(page: Page): Promise<void> {
+  // Exhibit 0 — reveal one-short so the "free curves" fan + bad caption render,
+  // then flip the trusted-dealer contrast so its "bad" banner renders too.
+  await page.locator('#viz-reveal-less').click();
+  await expect(page.locator('.viz-free').first()).toBeVisible();
+  await page.locator('.dealer-toggle [data-dealer="trusted"]').click();
+
   // Exhibit 1 — Distributed key generation.
   await page.locator('#run-dkg').click();
   await expect(page.locator('#copy-key')).toBeVisible();
@@ -73,6 +79,11 @@ async function drivePipeline(page: Page): Promise<void> {
   const slider = page.locator('#compromised');
   await slider.focus();
   for (let i = 0; i < 5; i++) await slider.press('ArrowRight');
+
+  // Exhibit 0 — leave the plot in the "pinned" state so the secret label + fitted
+  // curve (the good-path SVG text) are present for the scan too.
+  await page.locator('#viz-reveal-t').click();
+  await expect(page.locator('.viz-secret')).toBeVisible();
 }
 
 async function scan(page: Page): Promise<void> {

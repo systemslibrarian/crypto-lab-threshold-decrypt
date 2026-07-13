@@ -11,7 +11,8 @@ import {
   encryptToGroupPublicKey,
   decryptWithSharedPoint,
   createPartialDecryptionWithProof,
-  verifyPartialDecryption
+  verifyPartialDecryption,
+  checkPartialDecryption
 } from './elgamal';
 
 const G = p256.Point.BASE;
@@ -100,5 +101,34 @@ describe('Chaum-Pedersen partial-decryption proof', () => {
     const { c1Hex, partial } = await setup();
     const wrongPublic = scalarToPublicHex(randomScalar());
     expect(await verifyPartialDecryption(wrongPublic, c1Hex, partial)).toBe(false);
+  });
+
+  it('reports all three equalities holding for an honest proof', async () => {
+    const { publicHex, c1Hex, partial } = await setup();
+    const checks = await checkPartialDecryption(publicHex, c1Hex, partial);
+    expect(checks).toEqual({
+      challengeMatches: true,
+      firstEquation: true,
+      secondEquation: true,
+      valid: true
+    });
+  });
+
+  it('pinpoints g^s = a1·y^c as the equality a flipped response byte breaks', async () => {
+    const { publicHex, c1Hex, partial } = await setup();
+    // Flip the last response byte (same tamper the demo's "inject cheat" uses).
+    const flipped = (Number.parseInt(partial.proof.responseHex.slice(-2), 16) ^ 0xff)
+      .toString(16)
+      .padStart(2, '0');
+    const forged = {
+      ...partial,
+      proof: { ...partial.proof, responseHex: partial.proof.responseHex.slice(0, -2) + flipped }
+    };
+    const checks = await checkPartialDecryption(publicHex, c1Hex, forged);
+    // The challenge is recomputed from unchanged transcript points, so it still
+    // matches; it is the response-bearing equations that fail.
+    expect(checks.challengeMatches).toBe(true);
+    expect(checks.firstEquation).toBe(false);
+    expect(checks.valid).toBe(false);
   });
 });

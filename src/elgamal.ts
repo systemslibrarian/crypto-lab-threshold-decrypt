@@ -178,11 +178,29 @@ export const createPartialDecryptionWithProof = async (
   };
 };
 
-export const verifyPartialDecryption = async (
+/**
+ * The three checks a Chaum-Pedersen verifier runs, each reported separately so a
+ * UI can show WHICH equation a tampered proof breaks. A proof is accepted iff all
+ * three hold:
+ *   challengeMatches — the Fiat-Shamir challenge c recomputed from the transcript
+ *                      matches the one in the proof (binds the proof to this exact
+ *                      d, a1, a2, y, c1).
+ *   firstEquation    — g^s = a1 · y^c  (s is the right response for public key y).
+ *   secondEquation   — c1^s = a2 · d^c (the SAME s also opens d against base c1,
+ *                      proving d = x·c1 for the same secret x behind y).
+ */
+export type ChaumPedersenChecks = {
+  challengeMatches: boolean;
+  firstEquation: boolean;
+  secondEquation: boolean;
+  valid: boolean;
+};
+
+export const checkPartialDecryption = async (
   participantPublicShareHex: string,
   c1Hex: string,
   partial: PartialDecryption
-): Promise<boolean> => {
+): Promise<ChaumPedersenChecks> => {
   const y = pointFromHex(participantPublicShareHex);
   const c1 = pointFromHex(c1Hex);
   const d = pointFromHex(partial.sharePointHex);
@@ -199,18 +217,22 @@ export const verifyPartialDecryption = async (
     a1.toBytes(true),
     a2.toBytes(true)
   );
+  const challengeMatches = challenge === recomputedChallenge;
 
-  if (challenge !== recomputedChallenge) {
-    return false;
-  }
+  const firstEquation = G.multiply(response).equals(a1.add(y.multiply(challenge)));
+  const secondEquation = c1.multiply(response).equals(a2.add(d.multiply(challenge)));
 
-  const lhs1 = G.multiply(response);
-  const rhs1 = a1.add(y.multiply(challenge));
-  if (!lhs1.equals(rhs1)) {
-    return false;
-  }
-
-  const lhs2 = c1.multiply(response);
-  const rhs2 = a2.add(d.multiply(challenge));
-  return lhs2.equals(rhs2);
+  return {
+    challengeMatches,
+    firstEquation,
+    secondEquation,
+    valid: challengeMatches && firstEquation && secondEquation
+  };
 };
+
+export const verifyPartialDecryption = async (
+  participantPublicShareHex: string,
+  c1Hex: string,
+  partial: PartialDecryption
+): Promise<boolean> =>
+  (await checkPartialDecryption(participantPublicShareHex, c1Hex, partial)).valid;
