@@ -57,17 +57,25 @@ async function drivePipeline(page: Page): Promise<void> {
   await page.locator('#solo-fail').click();
 
   // Exhibit 3 — Generate partials, verify proofs (renders the "good" banner and
-  // verified/pending tokens), then inject a cheating partial (renders the
-  // rejected token + "bad" banner and tampered chips).
+  // verified tokens), then inject a cheating partial and RE-VERIFY, which is what
+  // renders the rejected token and the "bad" banner.
+  //
+  // The re-verify is load-bearing, not cosmetic. Injecting the cheat clears the
+  // verification state, so every token drops back to `.token.pending`: the page
+  // deliberately refuses to label a party rejected before the Chaum-Pedersen
+  // verifier has actually rejected it (knowing which partial the demo sabotaged
+  // is not the same as checking it). So `.token.tampered` cannot exist until the
+  // verifier runs again — asserting it straight after the injection was asserting
+  // the older behaviour, where the status was read off `state.tamperedId`.
   await page.locator('#generate-partials').click();
   await expect(page.locator('#verify-proofs')).toBeEnabled();
   await page.locator('#verify-proofs').click();
   await expect(page.locator('.token.verified').first()).toBeVisible();
   await page.locator('#inject-cheat').click();
-  await expect(page.locator('.token.tampered').first()).toBeVisible();
-
-  // Re-verify after tampering so the rejected proof state is fully rendered.
+  await expect(page.locator('.token.pending').first()).toBeVisible();
   await page.locator('#verify-proofs').click();
+  await expect(page.locator('.token.tampered').first()).toBeVisible();
+  await expect(page.getByText('The Chaum-Pedersen verifier rejected')).toBeVisible();
 
   // Exhibit 4 — Auto-select a valid quorum and recover, rendering the Lagrange
   // combination breakdown (the good-path figure).
