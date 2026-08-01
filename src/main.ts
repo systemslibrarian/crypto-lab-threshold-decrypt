@@ -129,15 +129,22 @@ const getTheme = (): ThemeMode =>
 const verifiedIds = (): number[] =>
   state.partials.filter((p) => state.verification[p.participantId]).map((p) => p.participantId);
 
+// Derived ONLY from what the Chaum-Pedersen verifier actually returned. It must
+// never short-circuit on `state.tamperedId`: the demo knowing which partial it
+// sabotaged is not evidence that the verifier catches it. Labelling that party
+// "rejected" before any proof has been checked would print a verdict the code
+// never computed — and would keep printing it even if checkPartialDecryption
+// were broken and accepted the forgery.
 const partyStatus = (id: number): 'verified' | 'tampered' | 'pending' => {
-  if (id === state.tamperedId) {
-    return 'tampered';
+  if (!state.verified) {
+    return 'pending';
   }
-  if (state.verified) {
-    return state.verification[id] ? 'verified' : 'tampered';
-  }
-  return 'pending';
+  return state.verification[id] ? 'verified' : 'tampered';
 };
+
+/** True only when every partial has been checked and every check passed. */
+const allProofsValid = (): boolean =>
+  state.verified && state.partials.every((p) => state.verification[p.participantId] === true);
 
 const stepState = () => {
   const keys = state.dkg !== null;
@@ -522,7 +529,7 @@ const render = (): void => {
       </section>
 
       <section class="panel ${canPartial ? '' : 'locked'}">
-        <h2>Exhibit 3 — Partial Decryption + NIZK Proofs ${badge(state.verified && state.tamperedId === null)}</h2>
+        <h2>Exhibit 3 — Partial Decryption + NIZK Proofs ${badge(allProofsValid())}</h2>
         <p>Each party computes a partial decryption d<sub>i</sub> = x<sub>i</sub>·c1 (its secret share times the ciphertext&rsquo;s c1) and attaches a ${gloss(
           'Chaum-Pedersen proof',
           'A proof that d_i was computed with the SAME secret share that sits behind the party&rsquo;s public key — without revealing the share itself.'
@@ -550,10 +557,17 @@ const render = (): void => {
           }
         </div>
         ${
-          state.tamperedId !== null
-            ? `<p class="meta bad" aria-live="polite">Party ${state.tamperedId}'s partial decryption was swapped for a different curve point, with its proof left untouched. Re-verify: the Chaum-Pedersen check rejects it, so it can be excluded before combination.</p>`
-            : state.verified
+          state.verified
+            ? allProofsValid()
               ? '<p class="meta good" aria-live="polite">All proofs verified — every partial is provably correct.</p>'
+              : `<p class="meta bad" aria-live="polite">The Chaum-Pedersen verifier rejected ${state.partials
+                  .filter((p) => state.verification[p.participantId] !== true)
+                  .map((p) => `P${p.participantId}`)
+                  .join(', ')}. Rejected partials are excluded before combination.</p>`
+            : state.tamperedId !== null
+              ? // A prompt, not a verdict: at this point nothing has been checked, so
+                // the page must not announce the outcome it expects.
+                `<p class="meta" aria-live="polite">Party ${state.tamperedId}'s partial decryption was swapped for a different curve point, with its proof bytes left untouched. Nothing has been checked yet — press <strong>Verify NIZK proofs</strong> to see what the Chaum-Pedersen verifier makes of it.</p>`
               : ''
         }
         ${state.verified ? renderProofChecks() : ''}
@@ -596,7 +610,9 @@ const render = (): void => {
           </div>
           <div class="actions">
             <button id="recover" ${state.busy ? 'disabled' : ''}>Attempt recovery</button>
-            <button id="select-quorum" class="ghost" ${state.busy ? 'disabled' : ''}>Auto-select ${state.threshold} valid</button>
+            <button id="select-quorum" class="ghost" ${state.busy ? 'disabled' : ''}>${
+              state.verified ? `Auto-select ${state.threshold} verified` : `Auto-select ${state.threshold}`
+            }</button>
           </div>
           ${
             state.recovery
@@ -963,12 +979,12 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#select-quorum')?.addEventListener('click', () => {
-    // Never auto-pick a partial we already know is bad: after verification use the
-    // verified set; before it, at least exclude an injected (tampered) partial.
-    const valid = state.verified
-      ? verifiedIds()
-      : state.partials.filter((p) => partyStatus(p.participantId) !== 'tampered').map((p) => p.participantId);
-    state.cooperating = new Set(valid.slice(0, state.threshold));
+    // After verification, pick from the set the verifier actually cleared. Before
+    // it, pick in party order — the demo must not quietly route around the cheat
+    // it injected, because "we know which one we broke" is not verification. If a
+    // rejected partial gets picked, Attempt recovery now says so explicitly.
+    const pickable = state.verified ? verifiedIds() : state.partials.map((p) => p.participantId);
+    state.cooperating = new Set(pickable.slice(0, state.threshold));
     state.recovery = null;
     state.breakdown = null;
     render();
@@ -976,7 +992,10 @@ const bind = (): void => {
 
   document.querySelector<HTMLButtonElement>('#recover')?.addEventListener('click', () =>
     withBusy(async () => {
-      if (!state.ciphertext) {
+      // Captured as locals so the non-null narrowing holds across the awaits below.
+      const dkg = state.dkg;
+      const ciphertext = state.ciphertext;
+      if (!ciphertext || !dkg) {
         return;
       }
       const chosen = state.partials.filter((p) => state.cooperating.has(p.participantId));
@@ -992,8 +1011,50 @@ const bind = (): void => {
         };
         return;
       }
+
+      // Verify EVERY partial's Chaum-Pedersen proof and refuse to combine when a
+      // chosen one fails. Both this panel ("t or more *valid* partials") and the
+      // README ("each proof is checked by verifyPartialDecryption before
+      // combination") assert that validity is enforced here — previously nothing
+      // on this path called the verifier at all, and a forged partial was caught
+      // only downstream by the AES-GCM tag. That is a different guarantee: it
+      // detects a corrupted result rather than rejecting a bad share, and it
+      // would not exist in a threshold scheme whose payload is not authenticated.
+      const checks: ProofChecks = {};
+      const verification: Record<number, boolean> = {};
+      for (const partial of state.partials) {
+        const pub = dkg.partyShares.find((p) => p.id === partial.participantId);
+        if (!pub) {
+          verification[partial.participantId] = false;
+          continue;
+        }
+        const result = await checkPartialDecryption(
+          pub.publicShareHex,
+          ciphertext.c1Hex,
+          partial
+        );
+        checks[partial.participantId] = result;
+        verification[partial.participantId] = result.valid;
+      }
+      state.proofChecks = checks;
+      state.verification = verification;
+      state.verified = true;
+
+      const rejected = chosen.filter((p) => verification[p.participantId] !== true);
+      if (rejected.length > 0) {
+        const names = rejected.map((p) => `P${p.participantId}`).join(', ');
+        state.recovery = {
+          ok: false,
+          title: 'Rejected before combination',
+          detail: `${names} failed Chaum-Pedersen verification, so ${
+            rejected.length === 1 ? 'it was' : 'they were'
+          } excluded and no combination was attempted. A bad partial drags the Lagrange sum to the wrong shared point, which is exactly why each partial is proved correct before it is allowed into the sum. Deselect ${names} and retry with ${state.threshold} verified partials.`
+        };
+        return;
+      }
+
       try {
-        const out = await thresholdDecryptCiphertext(state.ciphertext, chosen, state.threshold);
+        const out = await thresholdDecryptCiphertext(ciphertext, chosen, state.threshold);
         state.breakdown = explainCombination(chosen, state.threshold);
         state.recovery = {
           ok: true,
@@ -1001,11 +1062,15 @@ const bind = (): void => {
           detail: `“${escapeHtml(out.plaintext)}” — reconstructed from ${state.threshold} partials without ever rebuilding the key.`
         };
       } catch {
+        // Every chosen partial already passed Chaum-Pedersen above, so reaching
+        // here means the AES-GCM layer rejected the recovered shared point for
+        // some other reason. Say that, rather than blaming a bad partial the
+        // verifier just cleared.
         state.recovery = {
           ok: false,
-          title: 'Recovery failed',
+          title: 'Recovery failed after verification',
           detail:
-            'A selected partial is invalid (e.g. a cheating party&rsquo;s swapped partial decryption, which drags the Lagrange sum to the wrong shared point). This is exactly why each partial is verified before combination — exclude it and retry.'
+            'Every selected partial passed its Chaum-Pedersen proof, but AES-GCM still rejected the recovered shared point. That should not happen with a consistent quorum — re-run key generation and encryption to reset the pipeline.'
         };
       }
     })
