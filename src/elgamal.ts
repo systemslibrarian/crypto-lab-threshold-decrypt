@@ -179,6 +179,22 @@ export const createPartialDecryptionWithProof = async (
 };
 
 /**
+ * The demo's "inject cheating partial" tamper: a dishonest party leaves its proof
+ * bytes untouched and submits a WRONG partial decryption d' = d + G instead.
+ *
+ * Why this field, and why point addition rather than a byte flip:
+ *   - d appears in exactly one of the two verification equations (c1^s = a2·d^c),
+ *     so the forgery breaks that equation and leaves g^s = a1·y^c intact. Tampering
+ *     the response s instead breaks BOTH, because s appears in both — which is what
+ *     this control used to do while the prose claimed a single-equation failure.
+ *   - d is a compressed curve point, so flipping a byte of its hex lands off-curve
+ *     about half the time and makes pointFromHex throw before any equation can be
+ *     reported. Adding G always yields a valid point guaranteed to differ from d.
+ */
+export const forgeSharePoint = (sharePointHex: string): string =>
+  pointToHex(pointFromHex(sharePointHex).add(G));
+
+/**
  * The three checks a Chaum-Pedersen verifier runs, each reported separately so a
  * UI can show WHICH equation a tampered proof breaks. A proof is accepted iff all
  * three hold:

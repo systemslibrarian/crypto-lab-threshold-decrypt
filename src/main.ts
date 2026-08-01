@@ -4,6 +4,7 @@ import {
   createPartialDecryptionWithProof,
   decryptWithSharedPoint,
   encryptToGroupPublicKey,
+  forgeSharePoint,
   type ChaumPedersenChecks,
   type GroupCiphertext,
   type PartialDecryption
@@ -303,7 +304,8 @@ const shamirCaption = (): string => {
 // ---- Exhibit 3: Chaum-Pedersen equation checks ------------------------------
 // Shows, per party, the three tests a verifier runs and a ✓/✗ on each. Populated
 // from real checkPartialDecryption results, so the tampered partial visibly fails
-// the exact equation whose response byte was flipped (g^s = a1·y^c).
+// the one equation that contains the field the cheat changed: swapping the claimed
+// partial decryption d breaks c1^s = a2·d^c and leaves g^s = a1·y^c holding.
 const CP_EQUATIONS: { key: keyof ChaumPedersenChecks; label: string }[] = [
   { key: 'challengeMatches', label: 'c = H(transcript) — challenge recomputed from the proof' },
   { key: 'firstEquation', label: 'g^s = a1 · y^c — response opens the public key y' },
@@ -342,7 +344,7 @@ const renderProofChecks = (): string => {
 
   const tamperedNote =
     state.tamperedId !== null
-      ? `<p class="meta">Party ${state.tamperedId}&rsquo;s response byte was flipped, so <span class="mono">g^s</span> no longer equals <span class="mono">a1·y^c</span>: the first equation fails and the whole proof is rejected. The challenge still matches because the transcript points were untouched — the forgery can&rsquo;t survive both equations at once.</p>`
+      ? `<p class="meta">Party ${state.tamperedId} kept its proof bytes and submitted a <em>different</em> partial decryption <span class="mono">d</span>. Look at which line fails: <span class="mono">d</span> appears in the second equation only, so <span class="mono">c1^s = a2·d^c</span> breaks while <span class="mono">g^s = a1·y^c</span> still holds — the response <span class="mono">s</span> really is a valid opening for the party&rsquo;s public key <span class="mono">y</span>, it just does not open the <span class="mono">d</span> that was handed over. That link between the two bases is the whole job of a Chaum-Pedersen proof. The Fiat-Shamir challenge also fails, because <span class="mono">d</span> is hashed into the transcript, so a cheat cannot quietly restate <span class="mono">d</span> without the challenge moving too.</p>`
       : '';
 
   return `<div class="cp-checks" role="group" aria-label="Chaum-Pedersen verification breakdown">
@@ -549,7 +551,7 @@ const render = (): void => {
         </div>
         ${
           state.tamperedId !== null
-            ? `<p class="meta bad" aria-live="polite">Party ${state.tamperedId}'s proof was tampered. Re-verify: the Chaum-Pedersen check rejects it, so it can be excluded before combination.</p>`
+            ? `<p class="meta bad" aria-live="polite">Party ${state.tamperedId}'s partial decryption was swapped for a different curve point, with its proof left untouched. Re-verify: the Chaum-Pedersen check rejects it, so it can be excluded before combination.</p>`
             : state.verified
               ? '<p class="meta good" aria-live="polite">All proofs verified — every partial is provably correct.</p>'
               : ''
@@ -882,16 +884,14 @@ const bind = (): void => {
       return;
     }
     const target = state.partials[0];
-    // Flip the final byte of the proof response so the forgery is ALWAYS different
-    // from the original (XOR 0xff), guaranteeing the Chaum-Pedersen check rejects it
-    // — `+ 'aa'` alone would be a no-op in the ~1/256 case the byte was already 0xaa.
-    const forge = (hex: string): string => {
-      const flipped = (Number.parseInt(hex.slice(-2), 16) ^ 0xff).toString(16).padStart(2, '0');
-      return hex.slice(0, -2) + flipped;
-    };
+    // The cheat swaps the CLAIMED PARTIAL DECRYPTION d for d + G and leaves every
+    // proof byte alone. d appears in only the second verification equation, so the
+    // learner sees exactly one equation fail (plus the Fiat-Shamir binding, which
+    // hashes d) while g^s = a1·y^c still holds. Tampering the response instead
+    // would break both equations at once, since s appears in both.
     state.partials = state.partials.map((p) =>
       p.participantId === target.participantId
-        ? { ...p, proof: { ...p.proof, responseHex: forge(p.proof.responseHex) } }
+        ? { ...p, sharePointHex: forgeSharePoint(p.sharePointHex) }
         : p
     );
     state.tamperedId = target.participantId;
@@ -1005,7 +1005,7 @@ const bind = (): void => {
           ok: false,
           title: 'Recovery failed',
           detail:
-            'A selected partial is invalid (e.g. a tampered proof). This is exactly why each partial is verified before combination — exclude it and retry.'
+            'A selected partial is invalid (e.g. a cheating party&rsquo;s swapped partial decryption, which drags the Lagrange sum to the wrong shared point). This is exactly why each partial is verified before combination — exclude it and retry.'
         };
       }
     })

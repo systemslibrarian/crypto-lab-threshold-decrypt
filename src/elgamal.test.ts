@@ -12,7 +12,9 @@ import {
   decryptWithSharedPoint,
   createPartialDecryptionWithProof,
   verifyPartialDecryption,
-  checkPartialDecryption
+  checkPartialDecryption,
+  forgeSharePoint,
+  pointFromHex
 } from './elgamal';
 
 const G = p256.Point.BASE;
@@ -114,9 +116,35 @@ describe('Chaum-Pedersen partial-decryption proof', () => {
     });
   });
 
-  it('pinpoints g^s = a1·y^c as the equality a flipped response byte breaks', async () => {
+  it('forgeSharePoint yields a valid, different curve point', async () => {
+    const { partial } = await setup();
+    const forgedHex = forgeSharePoint(partial.sharePointHex);
+    expect(forgedHex).not.toBe(partial.sharePointHex);
+    // Must stay ON the curve: the UI parses it back before reporting equations.
+    expect(() => pointFromHex(forgedHex)).not.toThrow();
+  });
+
+  it('pinpoints c1^s = a2·d^c as the ONLY equation the demo cheat breaks', async () => {
     const { publicHex, c1Hex, partial } = await setup();
-    // Flip the last response byte (same tamper the demo's "inject cheat" uses).
+    // Exactly the tamper the demo's "inject cheating partial" button applies:
+    // swap the claimed partial decryption d, leave every proof byte untouched.
+    const forged = { ...partial, sharePointHex: forgeSharePoint(partial.sharePointHex) };
+    const checks = await checkPartialDecryption(publicHex, c1Hex, forged);
+
+    // d appears only in the second equation, so the first still holds. This is the
+    // claim the UI prose and the README both make; it must not silently regress.
+    expect(checks.firstEquation).toBe(true);
+    expect(checks.secondEquation).toBe(false);
+    // d is hashed into the Fiat-Shamir transcript, so the challenge binding fails too.
+    expect(checks.challengeMatches).toBe(false);
+    expect(checks.valid).toBe(false);
+  });
+
+  it('breaks BOTH equations when the response s is tampered instead', async () => {
+    // Regression guard for the reason the cheat does NOT target the response:
+    // s appears in both equations, so a flipped response byte fails both at once
+    // and no "which equation broke?" lesson is possible.
+    const { publicHex, c1Hex, partial } = await setup();
     const flipped = (Number.parseInt(partial.proof.responseHex.slice(-2), 16) ^ 0xff)
       .toString(16)
       .padStart(2, '0');
@@ -125,10 +153,9 @@ describe('Chaum-Pedersen partial-decryption proof', () => {
       proof: { ...partial.proof, responseHex: partial.proof.responseHex.slice(0, -2) + flipped }
     };
     const checks = await checkPartialDecryption(publicHex, c1Hex, forged);
-    // The challenge is recomputed from unchanged transcript points, so it still
-    // matches; it is the response-bearing equations that fail.
     expect(checks.challengeMatches).toBe(true);
     expect(checks.firstEquation).toBe(false);
+    expect(checks.secondEquation).toBe(false);
     expect(checks.valid).toBe(false);
   });
 });
