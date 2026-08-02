@@ -4,6 +4,7 @@
   --paper: #0f162b;
   --card: rgba(26, 38, 73, 0.82);
   --line: rgba(141, 178, 255, 0.32);
+  --control-line: #61749f;
   --brand: #63e6be;
   --brand-soft: #bcf2df;
   --good: #63e6be;
@@ -18,6 +19,7 @@ html[data-theme='light'] {
   --paper: #eef4ff;
   --card: rgba(255, 255, 255, 0.88);
   --line: rgba(73, 99, 156, 0.28);
+  --control-line: #79849a;
   --brand: #126871;
   --brand-soft: #1f334e;
   --good: #0f7a55;
@@ -190,7 +192,7 @@ input[type='range'] {
 }
 
 input[type='text'] {
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   background: var(--paper);
   color: var(--ink);
   border-radius: 0.65rem;
