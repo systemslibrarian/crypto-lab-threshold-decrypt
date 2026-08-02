@@ -24,7 +24,11 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: `npm run preview -- --port ${PORT} --strictPort`,
+    // Build first. `preview` only serves whatever already sits in dist/, so on a
+    // failed build the previous good bundle would linger and the suite would pass
+    // green against source that no longer compiles. Building here makes a broken
+    // build abort the run instead.
+    command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}${BASE}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000
