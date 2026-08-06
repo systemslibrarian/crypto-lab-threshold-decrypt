@@ -17,7 +17,7 @@
     "axe-core": "^4.12.1",
     "happy-dom": "^20.10.6",
     "typescript": "~6.0.2",
-    "vite": "^8.0.4",
+    "vite": "^8.2.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
