@@ -383,8 +383,16 @@ const render = (): void => {
     state.compromised
   );
 
+  // No `aria-label` on the badge: a <span> is role=generic, where aria-label is
+  // PROHIBITED — the browser discards it and axe files it under
+  // aria-prohibited-attr in `incomplete`, never as a violation, so the word
+  // "complete" reached nobody and the heading ended in a bare tick glyph.
+  // Real text solves it without ARIA: the tick is decoration, the word is the
+  // content, and the heading now reads "Exhibit 1 — ... complete".
   const badge = (done: boolean): string =>
-    done ? '<span class="badge done" aria-label="complete">✓</span>' : '';
+    done
+      ? '<span class="badge done"><span aria-hidden="true">\u2713</span><span class="sr-only">complete</span></span>'
+      : '';
 
   const stepItems = [
     { label: 'Generate keys', done: steps.keys, active: !steps.keys },
@@ -551,7 +559,10 @@ const render = (): void => {
                     const status = partyStatus(p.participantId);
                     const label =
                       status === 'verified' ? 'verified' : status === 'tampered' ? 'rejected' : 'unverified';
-                    return `<span class="token ${status}" aria-label="Party ${p.participantId} ${label}">P${p.participantId} · ${label}</span>`;
+                    // No `aria-label` here either, and none is needed: it was
+                    // prohibited on this span AND redundant, since the visible
+                    // text already reads "P3 · verified".
+                    return `<span class="token ${status}">P${p.participantId} · ${label}</span>`;
                   })
                   .join('')
           }

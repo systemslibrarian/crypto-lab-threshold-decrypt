@@ -8,8 +8,17 @@
   --brand: #63e6be;
   --brand-soft: #bcf2df;
   --good: #63e6be;
+  /* Separate INK tokens for --good / --bad used as TEXT. Both are fill and
+     border colours first, and both are also the colour of the TINT they sit
+     on (--good-soft is --good at 12-14%), so foreground and background
+     converge: in light theme `.token.verified` measured 4.42:1, #0f7a55 on its
+     own wash. Splitting the two jobs keeps the fills saturated and darkens only
+     the type. In dark theme the inks are unchanged — the light surfaces are
+     where the convergence bites. */
+  --good-ink: #63e6be;
   --good-soft: rgba(99, 230, 190, 0.14);
   --bad: #ff8da1;
+  --bad-ink: #ff8da1;
   --bad-soft: rgba(255, 141, 161, 0.14);
 }
 
@@ -23,13 +32,26 @@ html[data-theme='light'] {
   --brand: #126871;
   --brand-soft: #1f334e;
   --good: #0f7a55;
+  --good-ink: #0c6647;
   --good-soft: rgba(15, 122, 85, 0.12);
   --bad: #c2334d;
+  --bad-ink: #a82740;
   --bad-soft: rgba(194, 51, 77, 0.1);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* This stylesheet had NO `a` rule at all, so every link in the page footer —
+   which lives outside #app and is styled by nothing — fell through to the user
+   agent's #0000EE. Deep blue on the dark page background measures 1.83:1.
+   --brand is the lab's own accent and is authored per theme, so it clears AA on
+   both surfaces (~10.7:1 dark, ~5.7:1 light). The shared header's own links set
+   their colour through .cl-btn / .cl-title / .cl-sub, which outrank a bare
+   element selector, so the bar is untouched. */
+a {
+  color: var(--brand);
 }
 
 html,
@@ -261,7 +283,7 @@ button:disabled {
 }
 
 .badge.done {
-  color: var(--good);
+  color: var(--good-ink);
 }
 
 .label-row {
@@ -292,7 +314,11 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.2rem 0.7rem;
-  opacity: 0.7;
+  /* No `opacity: 0.7`. It faded --muted onto the page and left the three
+     upcoming step pills at 3.72:1 in light theme, on text that names the steps
+     of the whole demo. The three states are already distinguished without it:
+     --muted here, --ink + brand border when active, --good when done — plus the
+     `.sr-only` status word each pill carries. */
 }
 
 .steps li.active {
@@ -302,13 +328,20 @@ button:disabled {
 }
 
 .steps li.done {
-  color: var(--good);
+  color: var(--good-ink);
   border-color: var(--good);
   opacity: 1;
 }
 
 .panel.locked {
-  opacity: 0.72;
+  /* 0.9, not 0.72. A locked panel's PROSE is not an inactive control — it is
+     the explanation of what the step will do, and WCAG 1.4.3's
+     inactive-component exemption does not cover it. At 0.72 the light theme
+     rendered that prose at 4.01:1, the "Message" label at 4.01:1 and the NIZK
+     gloss summary at 3.54:1. The recession is still visible, and the real
+     affordance for "you cannot use this yet" is the disabled controls inside,
+     which is not opacity alone. */
+  opacity: 0.9;
 }
 
 .chooser {
@@ -339,11 +372,11 @@ button:disabled {
 }
 
 .chip.verified {
-  color: var(--good);
+  color: var(--good-ink);
 }
 
 .chip.tampered {
-  color: var(--bad);
+  color: var(--bad-ink);
   border-color: var(--bad);
 }
 
@@ -393,7 +426,7 @@ button:disabled {
 }
 
 .result.good strong {
-  color: var(--good);
+  color: var(--good-ink);
 }
 
 .result.bad {
@@ -402,7 +435,7 @@ button:disabled {
 }
 
 .result.bad strong {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 .result span {
@@ -468,23 +501,23 @@ button:disabled {
 }
 
 .breakdown .term.sum .term-id {
-  color: var(--good);
+  color: var(--good-ink);
   border-color: var(--good);
 }
 
 .breakdown .term-tag {
-  color: var(--good);
+  color: var(--good-ink);
   font-size: 0.8rem;
 }
 
 .breakdown.blind .term.wild .term-id {
-  color: var(--bad);
+  color: var(--bad-ink);
   border-color: var(--bad);
   border-style: dashed;
 }
 
 .breakdown.blind .term.wild .mono {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 .theme-toggle:hover {
@@ -552,13 +585,13 @@ button:disabled {
 }
 
 .token.verified {
-  color: var(--good);
+  color: var(--good-ink);
   border-color: var(--good);
   background: var(--good-soft);
 }
 
 .token.tampered {
-  color: var(--bad);
+  color: var(--bad-ink);
   border-color: var(--bad);
   background: var(--bad-soft);
 }
@@ -578,11 +611,11 @@ button:disabled {
 }
 
 .meta.good {
-  color: var(--good);
+  color: var(--good-ink);
 }
 
 .meta.bad {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 ul {
@@ -791,15 +824,15 @@ ul {
 }
 
 .cp-mark.ok {
-  color: var(--good);
+  color: var(--good-ink);
 }
 
 .cp-mark.no {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 .cp-eq.no span:not(.cp-mark) {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 @keyframes rise {
