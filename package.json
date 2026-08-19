@@ -13,12 +13,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.1",
     "axe-core": "^4.12.1",
-    "happy-dom": "^20.10.6",
-    "typescript": "~6.0.2",
-    "vite": "^8.0.4",
-    "vitest": "^3.2.4"
+    "happy-dom": "^20.11.1",
+    "typescript": "~7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@noble/curves": "^2.2.0"
