@@ -22,8 +22,6 @@ import {
 
 let app: HTMLDivElement;
 
-type ThemeMode = 'dark' | 'light';
-
 type Recovery = { ok: boolean; title: string; detail: string };
 
 // Exhibit 0: a small live Shamir polynomial the learner can probe. Its `secret`,
@@ -122,9 +120,6 @@ const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-
-const getTheme = (): ThemeMode =>
-  document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
 const verifiedIds = (): number[] =>
   state.partials.filter((p) => state.verification[p.participantId]).map((p) => p.participantId);
@@ -415,7 +410,6 @@ const render = (): void => {
   app.innerHTML = `
     <main class="shell" role="main" id="main-content">
       <header class="hero">
-        <button id="theme-toggle" class="theme-toggle" type="button"></button>
         <div class="cl-hero">
           <div class="cl-hero-main">
             <h1 class="cl-hero-title">Threshold Decryption</h1>
@@ -698,27 +692,7 @@ const render = (): void => {
     </main>
   `;
 
-  wireThemeToggle();
   bind();
-};
-
-const wireThemeToggle = (): void => {
-  const button = document.querySelector<HTMLButtonElement>('#theme-toggle');
-  if (!button) {
-    return;
-  }
-  const update = (): void => {
-    const theme = getTheme();
-    button.textContent = theme === 'dark' ? '🌙' : '☀️';
-    button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
-  };
-  update();
-  button.onclick = () => {
-    const next: ThemeMode = getTheme() === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    update();
-  };
 };
 
 const withBusy = async (work: () => Promise<void>): Promise<void> => {
@@ -784,9 +758,7 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
-    const theme = getTheme();
     state = initialState();
-    document.documentElement.setAttribute('data-theme', theme);
     render();
   });
 

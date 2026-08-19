@@ -27,7 +27,6 @@ describe('demo UI wiring', () => {
 
   it('exposes accessible labels, landmarks, and step state', () => {
     expect(document.querySelector('main[role="main"]#main-content')).not.toBeNull();
-    expect(document.querySelector('#theme-toggle')?.getAttribute('aria-label')).toBeTruthy();
     // First step is current until keys exist.
     const current = document.querySelector('.steps li[aria-current="step"]');
     expect(current?.textContent).toContain('Generate keys');
@@ -36,6 +35,24 @@ describe('demo UI wiring', () => {
       expect(document.querySelector(`label[for="${id}"]`)).not.toBeNull();
       expect(document.querySelector(`#${id}`)?.getAttribute('aria-valuenow')).not.toBeNull();
     }
+  });
+
+  it('renders no theme control and never writes a theme', () => {
+    expect(document.querySelector('#theme-toggle')).toBeNull();
+    expect(
+      document.querySelectorAll('#themeToggle, .theme-toggle, [data-theme-toggle]').length
+    ).toBe(0);
+    // Dark is pinned in the page head; nothing in the app may move it or store one.
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('theme')).toBeNull();
+
+    // Reset re-renders from a fresh state — it must not disturb the theme either.
+    // (The control only exists once keys have been generated.)
+    document.querySelector<HTMLButtonElement>('#run-dkg')!.click();
+    document.querySelector<HTMLButtonElement>('#reset')!.click();
+    expect(document.querySelector('#theme-toggle')).toBeNull();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('theme')).toBeNull();
   });
 
   it('labels the copy-key control after DKG', () => {
