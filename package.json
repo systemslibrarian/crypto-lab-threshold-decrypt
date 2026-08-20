@@ -12,7 +12,7 @@
     "test:a11y": "playwright test"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "axe-core": "^4.12.1",
     "happy-dom": "^20.11.1",
@@ -21,6 +21,6 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@noble/curves": "^2.2.0"
+    "@noble/curves": "^2.3.0"
   }
 }
