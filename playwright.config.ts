@@ -28,7 +28,11 @@ export default defineConfig({
     // failed build the previous good bundle would linger and the suite would pass
     // green against source that no longer compiles. Building here makes a broken
     // build abort the run instead.
-    command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
+    // Mutation runs already built the exact bundle whose hash is under test.
+    // A second build here can replace it underneath the asset assertion.
+    command: process.env.MUTATION_ASSETS
+      ? `npm run preview -- --port ${PORT} --strictPort`
+      : `npm run build && npm run preview -- --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}${BASE}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000

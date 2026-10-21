@@ -1,3 +1,4 @@
+import { initialElection, electionMarkup, bindElection, type ElectionState } from './electionPanel';
 import './style.css';
 import {
   checkPartialDecryption,
@@ -40,6 +41,7 @@ type ShamirViz = {
 type ProofChecks = Record<number, ChaumPedersenChecks>;
 
 type State = {
+  election: ElectionState;
   participants: number;
   threshold: number;
   message: string;
@@ -66,6 +68,7 @@ const buildViz = (secret: number, threshold: number, participants: number): Sham
 };
 
 const initialState = (): State => ({
+  election: initialElection(),
   participants: 5,
   threshold: 3,
   message: 'Vault release condition met.',
@@ -689,10 +692,13 @@ const render = (): void => {
           <article class="card"><h3>Removing “Trent”</h3><p>The classic trusted third party is replaced by t cooperating holders, each proving its step.</p></article>
         </div>
       </section>
+      ${electionMarkup(state.election, state.dkg)}
     </main>
   `;
 
   bind();
+  const election = state.election;
+  bindElection(election, () => state.dkg, render, () => state.election === election);
 };
 
 const withBusy = async (work: () => Promise<void>): Promise<void> => {

@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { boot, driveAllStates, expectBaselineNotStale, NARROW } from './gate';
+import { boot, driveAllStates, driveElection, expectBaselineNotStale, NARROW } from './gate';
 
 /**
  * WCAG A/AA regression gate for the threshold-decrypt lab.
@@ -21,6 +21,7 @@ for (const theme of ['dark'] as const) {
     test.setTimeout(900_000);
     await boot(page, theme);
     await driveAllStates(page, theme);
+    await driveElection(page, theme);
     expectBaselineNotStale();
   });
 
@@ -29,6 +30,11 @@ for (const theme of ['dark'] as const) {
     await page.setViewportSize(NARROW);
     await boot(page, theme);
     await driveAllStates(page, `${theme} @380px`);
+    await driveElection(page, `${theme} @380px`);
     expectBaselineNotStale();
   });
 }
+
+test('election exhibit reflows and passes accessibility at 320px',async({page})=>{
+  test.setTimeout(600_000);await page.setViewportSize({width:320,height:900});await boot(page,'dark');await driveElection(page,'dark @320px');
+});

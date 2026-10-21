@@ -878,3 +878,16 @@ ul {
     padding-left: 1.2rem;
   }
 }
+
+/* Election tally: scoped styles preserve the original exhibits. */
+#election, #election * { min-width: 0; }
+.election-voters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .75rem; margin: 1rem 0; }
+.election-voters .card { padding: .75rem; }
+.election-voters select { width: 100%; min-height: 44px; background: var(--paper); color: var(--ink); border: 1px solid var(--control-line); border-radius: 6px; }
+#election .election-toggle { display: flex; align-items: center; gap: .7rem; min-height: 44px; }
+.election-toggle input { width: 20px; height: 20px; flex-shrink: 0; }
+#election .mono, #election pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+#election pre { max-height: 30rem; overflow: auto; }
+#election-negative { border: 2px solid currentColor; padding: .75rem; }
+#election button { border-color: var(--control-line); }
+@media(max-width:640px){.election-voters { grid-template-columns: 1fr; }}

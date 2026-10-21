@@ -450,3 +450,24 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#copy-key')).toHaveCount(0);
   await scan(page, `${theme} / reset back to locked`);
 }
+
+/** Reach each election rendering through real controls; arithmetic belongs in claims. */
+export async function driveElection(page:Page,label:string):Promise<void>{
+  const at=(s:string)=>scan(page,label+' / election '+s);
+  const cast=async()=>{await page.locator('#election-cast').click();await expect(page.locator('#election-tally')).toBeEnabled({timeout:30_000});};
+  const tally=async()=>{await page.locator('#election-tally').click();await expect(page.locator('#election-open')).toBeEnabled();};
+  const open=async()=>{await page.locator('#election-open').click();await expect(page.locator('#election-result')).toBeVisible();};
+  await at('locked arrival');await page.locator('#run-dkg').click();await expect(page.locator('#election-cast')).toBeEnabled();await at('key ready');
+  await cast();await at('seven proofs');await tally();await at('encrypted sum and quorum');await open();await at('opened total');
+  await page.locator('#election-receipt').click();await expect(page.locator('#election-receipt-result')).toBeVisible();await at('receipt negative fixture');
+  await page.locator('#election-details summary').click();await at('public transcript open');await page.locator('#election-details summary').click();
+  await page.locator('[data-election-party][aria-pressed="true"]').first().click();await open();await at('below threshold refusal');
+  await page.locator('#election-vote-1').selectOption('2');await page.locator('#election-proof').uncheck();await cast();await tally();await open();await at('unchecked over-vote');
+  await page.locator('#election-proof').check();await tally();await open();await at('over-vote rejected before sum');
+  await page.locator('#election-replay').click();await expect(page.locator('#election-tally')).toBeEnabled();await at('replayed proof');
+  for(let i=0;i<7;i++)await page.locator('#election-vote-'+i).selectOption('0');await cast();await tally();await open();await at('zero tally');
+  for(let i=0;i<7;i++)await page.locator('#election-vote-'+i).selectOption('1');await page.locator('#election-vote-0').selectOption('2');await page.locator('#election-proof').uncheck();await cast();await tally();await open();await at('no tally in range');
+  await page.locator('#election-vote-0').selectOption('-1');await cast();await tally();await open();await at('unchecked negative vote');
+  for(const [i,v] of [2,-1,-1,0,0,0,0].entries())await page.locator('#election-vote-'+i).selectOption(String(v));await cast();await tally();await open();await at('invalid votes cancel numerically');
+  await page.locator('#run-dkg').click();await at('retired after new key');
+}

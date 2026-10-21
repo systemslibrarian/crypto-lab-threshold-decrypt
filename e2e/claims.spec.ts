@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { electionTests } from './election-checks';
+electionTests();
 
 /**
  * Functional gate for the threshold-decrypt lab.
