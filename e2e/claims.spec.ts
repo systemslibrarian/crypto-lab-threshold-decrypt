@@ -259,6 +259,92 @@ test('Exhibit 2: solo decryption fails and names the reason and the quorum it ne
   expect(soloText).not.toContain('Unexpected');
 });
 
+test('Exhibit 2: editing the message retires its ciphertext and every downstream verdict', async ({ page }) => {
+  await runToPartials(page, 'first message');
+  await page.locator('#verify-proofs').click();
+  await expect(page.getByText('All proofs verified — every partial is provably correct.')).toBeVisible();
+  await page.locator('#select-quorum').click();
+  await page.locator('#recover').click();
+  await expect(page.locator('.result.good')).toContainText('Plaintext recovered');
+
+  await page.locator('#message').fill('second message');
+
+  await expect(page.locator('#message')).toHaveValue('second message');
+  await expect(page.getByText('Ciphertext appears after encryption.')).toBeVisible();
+  await expect(page.locator('#pipeline-notice')).toContainText('every result derived from it were retired');
+  await expect(page.locator('.chip[data-party]')).toHaveCount(0);
+  await expect(page.locator('.cp-party')).toHaveCount(0);
+  await expect(page.locator('.result')).toHaveCount(0);
+  await expect(page.locator('#generate-partials')).toBeDisabled();
+  await expect(page.locator('#encrypt')).toBeEnabled();
+});
+
+test('Exhibit 2: a late encryption result cannot repaint evidence after the message changes', async ({ page }) => {
+  await page.addInitScript(() => {
+    const control = window as typeof window & {
+      __thresholdEncryptStarted: boolean;
+      __thresholdEncryptFinished: boolean;
+      __releaseThresholdEncrypt: () => void;
+    };
+    const originalEncrypt = crypto.subtle.encrypt.bind(crypto.subtle) as unknown as (
+      ...args: unknown[]
+    ) => Promise<ArrayBuffer>;
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    control.__thresholdEncryptStarted = false;
+    control.__thresholdEncryptFinished = false;
+    control.__releaseThresholdEncrypt = release;
+    Object.defineProperty(crypto.subtle, 'encrypt', {
+      configurable: true,
+      value: async (...args: unknown[]): Promise<ArrayBuffer> => {
+        control.__thresholdEncryptStarted = true;
+        await gate;
+        const result = await originalEncrypt(...args);
+        control.__thresholdEncryptFinished = true;
+        return result;
+      }
+    });
+  });
+  await page.reload();
+  await expect(page.locator('#run-dkg')).toBeVisible();
+  await page.locator('#run-dkg').click();
+  await page.locator('#message').fill('message being encrypted');
+  await page.locator('#encrypt').click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __thresholdEncryptStarted: boolean })
+            .__thresholdEncryptStarted
+      )
+    )
+    .toBe(true);
+
+  await page.locator('#message').fill('message changed while encryption was pending');
+  await expect(page.locator('#pipeline-notice')).toContainText('previous ciphertext');
+  await page.evaluate(() =>
+    (window as typeof window & { __releaseThresholdEncrypt: () => void })
+      .__releaseThresholdEncrypt()
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __thresholdEncryptFinished: boolean })
+            .__thresholdEncryptFinished
+      )
+    )
+    .toBe(true);
+
+  await expect(page.locator('#message')).toHaveValue('message changed while encryption was pending');
+  await expect(page.getByText('Ciphertext appears after encryption.')).toBeVisible();
+  await expect(page.getByText(/^c1: /)).toHaveCount(0);
+  await expect(page.locator('#pipeline-notice')).toContainText('every result derived from it were retired');
+  await expect(page.locator('#encrypt')).toBeEnabled();
+});
+
 // ---------------------------------------------------------------------------
 // Exhibit 3 — partial decryptions and their NIZK proofs
 // ---------------------------------------------------------------------------

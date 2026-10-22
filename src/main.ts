@@ -58,6 +58,7 @@ type State = {
   recovery: Recovery | null;
   breakdown: CombinationBreakdown | null;
   soloResult: string | null;
+  pipelineNotice: string | null;
   busy: boolean;
   viz: ShamirViz;
 };
@@ -85,17 +86,20 @@ const initialState = (): State => ({
   recovery: null,
   breakdown: null,
   soloResult: null,
+  pipelineNotice: null,
   busy: false,
   viz: buildViz(11, 3, 5)
 });
 
 let state: State = initialState();
+let pipelineGeneration = 0;
 
 // Clears the generated key + all downstream steps while preserving the user's
 // configuration (party count, threshold, message, compromised count). Used when
 // re-running DKG and whenever the scheme is changed after keys already exist —
 // the old shares no longer match a new (n, t), so they must be discarded.
 const resetPipeline = (): void => {
+  pipelineGeneration += 1;
   const { participants, threshold, message, compromised, dealerMode, viz } = state;
   state = initialState();
   state.participants = participants;
@@ -104,6 +108,31 @@ const resetPipeline = (): void => {
   state.compromised = compromised;
   state.dealerMode = dealerMode;
   state.viz = viz; // the Exhibit 0 illustration is independent of the live pipeline
+};
+
+const retireMessageBoundEvidence = (message: string): void => {
+  const hadEvidence =
+    state.busy ||
+    state.ciphertext !== null ||
+    state.partials.length > 0 ||
+    state.recovery !== null ||
+    state.soloResult !== null;
+  pipelineGeneration += 1;
+  state.message = message;
+  state.busy = false;
+  state.ciphertext = null;
+  state.partials = [];
+  state.tamperedId = null;
+  state.verification = {};
+  state.proofChecks = {};
+  state.verified = false;
+  state.cooperating = new Set<number>();
+  state.recovery = null;
+  state.breakdown = null;
+  state.soloResult = null;
+  state.pipelineNotice = hadEvidence
+    ? 'Message changed. The previous ciphertext and every result derived from it were retired; encrypt the current message to continue.'
+    : null;
 };
 
 // Rebuilds the Exhibit 0 illustration to a fresh secret + polynomial matching the
@@ -530,6 +559,11 @@ const render = (): void => {
                <p class="meta">ciphertext: <span class="mono">${short(state.ciphertext.ciphertextHex)}</span></p>`
             : '<p class="meta">Ciphertext appears after encryption.</p>'
         }
+        ${
+          state.pipelineNotice
+            ? `<p id="pipeline-notice" class="meta" role="status">${escapeHtml(state.pipelineNotice)}</p>`
+            : ''
+        }
         ${state.soloResult ? `<p class="meta bad" aria-live="polite">${state.soloResult}</p>` : ''}
       </section>
 
@@ -598,7 +632,7 @@ const render = (): void => {
                 const proofText =
                   status === 'verified' ? 'proof verified' : status === 'tampered' ? 'proof rejected' : 'proof unverified';
                 return `<button class="chip ${picked ? 'picked' : ''} ${status}" type="button"
-                  data-party="${id}" aria-pressed="${picked}"
+                  data-party="${id}" aria-pressed="${picked}" ${state.busy ? 'disabled' : ''}
                   aria-label="Party ${id}, ${picked ? 'selected' : 'not selected'}, ${proofText}">P${id}${
                   glyph ? `<span class="chip-mark" aria-hidden="true">${glyph}</span>` : ''
                 }</button>`;
@@ -701,14 +735,19 @@ const render = (): void => {
   bindElection(election, () => state.dkg, render, () => state.election === election);
 };
 
-const withBusy = async (work: () => Promise<void>): Promise<void> => {
-  state.busy = true;
+const withBusy = async (work: (current: () => boolean) => Promise<void>): Promise<void> => {
+  const target = state;
+  const generation = ++pipelineGeneration;
+  target.busy = true;
   render();
+  const current = (): boolean => state === target && pipelineGeneration === generation;
   try {
-    await work();
+    await work(current);
   } finally {
-    state.busy = false;
-    render();
+    if (current()) {
+      target.busy = false;
+      render();
+    }
   }
 };
 
@@ -751,10 +790,24 @@ const bind = (): void => {
 
   const message = document.querySelector<HTMLInputElement>('#message');
   message?.addEventListener('input', () => {
-    state.message = message.value;
+    if (message.value === state.message) {
+      return;
+    }
+    const selectionStart = message.selectionStart;
+    const selectionEnd = message.selectionEnd;
+    retireMessageBoundEvidence(message.value);
+    render();
+    const replacement = document.querySelector<HTMLInputElement>('#message');
+    replacement?.focus();
+    if (selectionStart !== null && selectionEnd !== null) {
+      replacement?.setSelectionRange(selectionStart, selectionEnd);
+    }
   });
 
   document.querySelector<HTMLButtonElement>('#run-dkg')?.addEventListener('click', () => {
+    if (state.busy) {
+      return;
+    }
     resetPipeline();
     state.dkg = runDistributedKeyGeneration({
       participants: state.participants,
@@ -764,6 +817,10 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
+    if (state.busy) {
+      return;
+    }
+    pipelineGeneration += 1;
     state = initialState();
     render();
   });
@@ -787,11 +844,17 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#encrypt')?.addEventListener('click', () =>
-    withBusy(async () => {
-      if (!state.dkg) {
+    withBusy(async (current) => {
+      const dkg = state.dkg;
+      const message = state.message;
+      if (!dkg) {
         return;
       }
-      state.ciphertext = await encryptToGroupPublicKey(state.dkg.groupPublicKeyHex, state.message);
+      const ciphertext = await encryptToGroupPublicKey(dkg.groupPublicKeyHex, message);
+      if (!current()) {
+        return;
+      }
+      state.ciphertext = ciphertext;
       state.partials = [];
       state.verification = {};
       state.proofChecks = {};
@@ -801,12 +864,17 @@ const bind = (): void => {
       state.recovery = null;
       state.breakdown = null;
       state.soloResult = null;
+      state.pipelineNotice = null;
     })
   );
 
   document.querySelector<HTMLButtonElement>('#solo-fail')?.addEventListener('click', () =>
-    withBusy(async () => {
-      if (!state.ciphertext || !state.dkg) {
+    withBusy(async (current) => {
+      const ciphertext = state.ciphertext;
+      const dkg = state.dkg;
+      const threshold = state.threshold;
+      const existingPartial = state.partials[0];
+      if (!ciphertext || !dkg) {
         return;
       }
       // A single party's partial point d_i = x_i·c1 is NOT the group shared secret
@@ -814,37 +882,49 @@ const bind = (): void => {
       // the AES-GCM layer and the authentication tag rejects it — a real failure,
       // not just the "too few partials" length guard.
       const onlyPartial =
-        state.partials[0] ??
+        existingPartial ??
         (await createPartialDecryptionWithProof(
-          state.dkg.partyShares[0].id,
-          state.dkg.partyShares[0].privateShare,
-          state.dkg.partyShares[0].publicShareHex,
-          state.ciphertext.c1Hex
+          dkg.partyShares[0].id,
+          dkg.partyShares[0].privateShare,
+          dkg.partyShares[0].publicShareHex,
+          ciphertext.c1Hex
         ));
+      if (!current()) {
+        return;
+      }
       try {
-        await decryptWithSharedPoint(onlyPartial.sharePointHex, state.ciphertext);
-        state.soloResult = 'Unexpected: solo decryption succeeded.';
+        await decryptWithSharedPoint(onlyPartial.sharePointHex, ciphertext);
+        if (current()) {
+          state.soloResult = 'Unexpected: solo decryption succeeded.';
+        }
       } catch {
-        state.soloResult = `Solo decryption failed as expected — one party's partial is not the group shared secret, so AES-GCM authentication rejects it. At least ${state.threshold} parties must combine.`;
+        if (current()) {
+          state.soloResult = `Solo decryption failed as expected — one party's partial is not the group shared secret, so AES-GCM authentication rejects it. At least ${threshold} parties must combine.`;
+        }
       }
     })
   );
 
   document.querySelector<HTMLButtonElement>('#generate-partials')?.addEventListener('click', () =>
-    withBusy(async () => {
-      if (!state.dkg || !state.ciphertext) {
+    withBusy(async (current) => {
+      const dkg = state.dkg;
+      const ciphertext = state.ciphertext;
+      if (!dkg || !ciphertext) {
         return;
       }
       const out: PartialDecryption[] = [];
-      for (const party of state.dkg.partyShares) {
+      for (const party of dkg.partyShares) {
         out.push(
           await createPartialDecryptionWithProof(
             party.id,
             party.privateShare,
             party.publicShareHex,
-            state.ciphertext.c1Hex
+            ciphertext.c1Hex
           )
         );
+        if (!current()) {
+          return;
+        }
       }
       state.partials = out;
       state.verification = {};
@@ -858,20 +938,26 @@ const bind = (): void => {
   );
 
   document.querySelector<HTMLButtonElement>('#verify-proofs')?.addEventListener('click', () =>
-    withBusy(async () => {
-      if (!state.dkg || !state.ciphertext) {
+    withBusy(async (current) => {
+      const dkg = state.dkg;
+      const ciphertext = state.ciphertext;
+      const partials = [...state.partials];
+      if (!dkg || !ciphertext) {
         return;
       }
       const next: Record<number, boolean> = {};
       const checks: ProofChecks = {};
-      for (const partial of state.partials) {
-        const pub = state.dkg.partyShares.find((p) => p.id === partial.participantId);
+      for (const partial of partials) {
+        const pub = dkg.partyShares.find((p) => p.id === partial.participantId);
         if (pub) {
           const result = await checkPartialDecryption(
             pub.publicShareHex,
-            state.ciphertext.c1Hex,
+            ciphertext.c1Hex,
             partial
           );
+          if (!current()) {
+            return;
+          }
           checks[partial.participantId] = result;
           next[partial.participantId] = result.valid;
         } else {
@@ -885,7 +971,7 @@ const bind = (): void => {
   );
 
   document.querySelector<HTMLButtonElement>('#inject-cheat')?.addEventListener('click', () => {
-    if (state.partials.length === 0) {
+    if (state.busy || state.partials.length === 0) {
       return;
     }
     const target = state.partials[0];
@@ -911,6 +997,9 @@ const bind = (): void => {
 
   document.querySelectorAll<HTMLButtonElement>('.chip[data-party]').forEach((chip) => {
     chip.addEventListener('click', () => {
+      if (state.busy) {
+        return;
+      }
       const id = Number.parseInt(chip.dataset.party ?? '', 10);
       if (Number.isNaN(id)) {
         return;
@@ -968,6 +1057,9 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#select-quorum')?.addEventListener('click', () => {
+    if (state.busy) {
+      return;
+    }
     // After verification, pick from the set the verifier actually cleared. Before
     // it, pick in party order — the demo must not quietly route around the cheat
     // it injected, because "we know which one we broke" is not verification. If a
@@ -980,21 +1072,24 @@ const bind = (): void => {
   });
 
   document.querySelector<HTMLButtonElement>('#recover')?.addEventListener('click', () =>
-    withBusy(async () => {
+    withBusy(async (current) => {
       // Captured as locals so the non-null narrowing holds across the awaits below.
       const dkg = state.dkg;
       const ciphertext = state.ciphertext;
+      const threshold = state.threshold;
+      const partials = [...state.partials];
+      const cooperating = new Set(state.cooperating);
       if (!ciphertext || !dkg) {
         return;
       }
-      const chosen = state.partials.filter((p) => state.cooperating.has(p.participantId));
+      const chosen = partials.filter((p) => cooperating.has(p.participantId));
       state.breakdown = null;
-      if (chosen.length < state.threshold) {
-        const gap = state.threshold - chosen.length;
+      if (chosen.length < threshold) {
+        const gap = threshold - chosen.length;
         state.recovery = {
           ok: false,
           title: 'Below threshold — information-theoretically blind',
-          detail: `${chosen.length} of ${state.threshold} selected. The ${gap} missing ${
+          detail: `${chosen.length} of ${threshold} selected. The ${gap} missing ${
             gap === 1 ? 'share is a free variable' : 'shares are free variables'
           }: as it ranges over the curve, the recovered secret ranges over the entire group, so every plaintext is equally consistent. ${chosen.length} parties learn nothing.`
         };
@@ -1011,7 +1106,7 @@ const bind = (): void => {
       // would not exist in a threshold scheme whose payload is not authenticated.
       const checks: ProofChecks = {};
       const verification: Record<number, boolean> = {};
-      for (const partial of state.partials) {
+      for (const partial of partials) {
         const pub = dkg.partyShares.find((p) => p.id === partial.participantId);
         if (!pub) {
           verification[partial.participantId] = false;
@@ -1022,6 +1117,9 @@ const bind = (): void => {
           ciphertext.c1Hex,
           partial
         );
+        if (!current()) {
+          return;
+        }
         checks[partial.participantId] = result;
         verification[partial.participantId] = result.valid;
       }
@@ -1037,30 +1135,35 @@ const bind = (): void => {
           title: 'Rejected before combination',
           detail: `${names} failed Chaum-Pedersen verification, so ${
             rejected.length === 1 ? 'it was' : 'they were'
-          } excluded and no combination was attempted. A bad partial drags the Lagrange sum to the wrong shared point, which is exactly why each partial is proved correct before it is allowed into the sum. Deselect ${names} and retry with ${state.threshold} verified partials.`
+          } excluded and no combination was attempted. A bad partial drags the Lagrange sum to the wrong shared point, which is exactly why each partial is proved correct before it is allowed into the sum. Deselect ${names} and retry with ${threshold} verified partials.`
         };
         return;
       }
 
       try {
-        const out = await thresholdDecryptCiphertext(ciphertext, chosen, state.threshold);
-        state.breakdown = explainCombination(chosen, state.threshold);
+        const out = await thresholdDecryptCiphertext(ciphertext, chosen, threshold);
+        if (!current()) {
+          return;
+        }
+        state.breakdown = explainCombination(chosen, threshold);
         state.recovery = {
           ok: true,
           title: 'Plaintext recovered',
-          detail: `“${escapeHtml(out.plaintext)}” — reconstructed from ${state.threshold} partials without ever rebuilding the key.`
+          detail: `“${escapeHtml(out.plaintext)}” — reconstructed from ${threshold} partials without ever rebuilding the key.`
         };
       } catch {
         // Every chosen partial already passed Chaum-Pedersen above, so reaching
         // here means the AES-GCM layer rejected the recovered shared point for
         // some other reason. Say that, rather than blaming a bad partial the
         // verifier just cleared.
-        state.recovery = {
-          ok: false,
-          title: 'Recovery failed after verification',
-          detail:
-            'Every selected partial passed its Chaum-Pedersen proof, but AES-GCM still rejected the recovered shared point. That should not happen with a consistent quorum — re-run key generation and encryption to reset the pipeline.'
-        };
+        if (current()) {
+          state.recovery = {
+            ok: false,
+            title: 'Recovery failed after verification',
+            detail:
+              'Every selected partial passed its Chaum-Pedersen proof, but AES-GCM still rejected the recovered shared point. That should not happen with a consistent quorum — re-run key generation and encryption to reset the pipeline.'
+          };
+        }
       }
     })
   );
@@ -1072,6 +1175,7 @@ export const mount = (): void => {
     throw new Error('Missing #app');
   }
   app = el;
+  pipelineGeneration += 1;
   state = initialState();
   render();
 };

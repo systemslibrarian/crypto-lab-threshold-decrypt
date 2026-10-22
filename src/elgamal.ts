@@ -31,6 +31,9 @@ export const hexToBytes = (hex: string): Uint8Array => {
   if (clean.length % 2 !== 0) {
     throw new Error('invalid hex length');
   }
+  if (!/^[0-9a-fA-F]*$/.test(clean)) {
+    throw new Error('invalid hex character');
+  }
   const out = new Uint8Array(clean.length / 2);
   for (let i = 0; i < out.length; i += 1) {
     out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
@@ -64,6 +67,17 @@ const bytesToBigint = (bytes: Uint8Array): bigint => {
 const bigintToBytes32 = (value: bigint): Uint8Array => {
   const hex = modN(value).toString(16).padStart(64, '0');
   return hexToBytes(hex);
+};
+
+const canonicalProofScalar = (hex: string): bigint => {
+  if (!/^[0-9a-f]{64}$/.test(hex)) {
+    throw new Error('invalid proof scalar encoding');
+  }
+  const scalar = bytesToBigint(hexToBytes(hex));
+  if (scalar >= P256_GROUP_ORDER) {
+    throw new Error('proof scalar is outside the P-256 group order');
+  }
+  return scalar;
 };
 
 export const pointToHex = (point: Point): string => point.toHex(true);
@@ -217,33 +231,42 @@ export const checkPartialDecryption = async (
   c1Hex: string,
   partial: PartialDecryption
 ): Promise<ChaumPedersenChecks> => {
-  const y = pointFromHex(participantPublicShareHex);
-  const c1 = pointFromHex(c1Hex);
-  const d = pointFromHex(partial.sharePointHex);
-  const a1 = pointFromHex(partial.proof.a1Hex);
-  const a2 = pointFromHex(partial.proof.a2Hex);
-  const challenge = modN(bytesToBigint(hexToBytes(partial.proof.challengeHex)));
-  const response = modN(bytesToBigint(hexToBytes(partial.proof.responseHex)));
+  try {
+    const y = pointFromHex(participantPublicShareHex);
+    const c1 = pointFromHex(c1Hex);
+    const d = pointFromHex(partial.sharePointHex);
+    const a1 = pointFromHex(partial.proof.a1Hex);
+    const a2 = pointFromHex(partial.proof.a2Hex);
+    const challenge = canonicalProofScalar(partial.proof.challengeHex);
+    const response = canonicalProofScalar(partial.proof.responseHex);
 
-  const recomputedChallenge = await hashToScalar(
-    G.toBytes(true),
-    y.toBytes(true),
-    c1.toBytes(true),
-    d.toBytes(true),
-    a1.toBytes(true),
-    a2.toBytes(true)
-  );
-  const challengeMatches = challenge === recomputedChallenge;
+    const recomputedChallenge = await hashToScalar(
+      G.toBytes(true),
+      y.toBytes(true),
+      c1.toBytes(true),
+      d.toBytes(true),
+      a1.toBytes(true),
+      a2.toBytes(true)
+    );
+    const challengeMatches = challenge === recomputedChallenge;
 
-  const firstEquation = G.multiply(response).equals(a1.add(y.multiply(challenge)));
-  const secondEquation = c1.multiply(response).equals(a2.add(d.multiply(challenge)));
+    const firstEquation = G.multiply(response).equals(a1.add(y.multiply(challenge)));
+    const secondEquation = c1.multiply(response).equals(a2.add(d.multiply(challenge)));
 
-  return {
-    challengeMatches,
-    firstEquation,
-    secondEquation,
-    valid: challengeMatches && firstEquation && secondEquation
-  };
+    return {
+      challengeMatches,
+      firstEquation,
+      secondEquation,
+      valid: challengeMatches && firstEquation && secondEquation
+    };
+  } catch {
+    return {
+      challengeMatches: false,
+      firstEquation: false,
+      secondEquation: false,
+      valid: false
+    };
+  }
 };
 
 export const verifyPartialDecryption = async (
