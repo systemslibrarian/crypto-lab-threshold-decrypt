@@ -594,7 +594,6 @@ const render = (): void => {
                 const id = p.participantId;
                 const picked = state.cooperating.has(id);
                 const status = partyStatus(id);
-                const glyph = status === 'verified' ? '✓' : status === 'tampered' ? '✕' : '';
                 const proofText =
                   status === 'verified' ? 'proof verified' : status === 'tampered' ? 'proof rejected' : 'proof unverified';
                 return `<button class="chip ${picked ? 'picked' : ''} ${status}" type="button"
