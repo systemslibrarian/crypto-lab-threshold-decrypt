@@ -599,9 +599,7 @@ const render = (): void => {
                   status === 'verified' ? 'proof verified' : status === 'tampered' ? 'proof rejected' : 'proof unverified';
                 return `<button class="chip ${picked ? 'picked' : ''} ${status}" type="button"
                   data-party="${id}" aria-pressed="${picked}"
-                  aria-label="Party ${id}, ${picked ? 'selected' : 'not selected'}, ${proofText}">P${id}${
-                  glyph ? `<span class="chip-mark" aria-hidden="true">${glyph}</span>` : ''
-                }</button>`;
+                  aria-label="P${id}: party ${id}, ${picked ? 'selected' : 'not selected'}, ${proofText}">P${id}</button>`;
               })
               .join('')}
           </div>
