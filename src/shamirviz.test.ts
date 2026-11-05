@@ -59,10 +59,26 @@ describe('Shamir visualization math (small-field, same algebra)', () => {
   });
 
   it('makeShamirDemo yields the secret as the intercept recoverable from t shares', () => {
-    const { coeffs, shares } = makeShamirDemo(12, 3, 5, () => 0.5);
+    const { coeffs, shares } = makeShamirDemo(12, 3, 5, () => 2);
     expect(coeffs[0]).toBe(12);
     expect(shares).toHaveLength(5);
     expect(fToNumber(lagrangeEvalExact(shares.slice(0, 3), 0))).toBe(12);
+  });
+
+  it('maps every bounded draw to the coefficient the curve was always drawn with', () => {
+    // The source of the masking coefficients moved from Math.random to the CSPRNG
+    // (src/uniform.ts). The MAPPING must not move with it, or the illustration
+    // changes shape: `draw(5) - 2 || 1` over draws 0..4 gives -2, -1, 1, 1, 2 --
+    // and 0 becomes 1 on purpose, so a coefficient is never zero and the curve
+    // stays visibly bent. That doubles 1's share of the five outcomes, which is a
+    // property of the drawing, not of the randomness, and it is pinned here so a
+    // future tidy-up of `|| 1` has to argue with a test.
+    const coefficientFor = (value: number): number => {
+      const { coeffs } = makeShamirDemo(7, 2, 3, () => value);
+      expect(coeffs[0]).toBe(7);
+      return coeffs[1];
+    };
+    expect([0, 1, 2, 3, 4].map(coefficientFor)).toEqual([-2, -1, 1, 1, 2]);
   });
 
   it('sampleCurve returns a dense polyline spanning the requested range', () => {

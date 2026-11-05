@@ -69,7 +69,16 @@ const bigintToBytes32 = (value: bigint): Uint8Array => {
   return hexToBytes(hex);
 };
 
-const canonicalProofScalar = (hex: string): bigint => {
+/**
+ * A proof scalar is its ENCODING, not just its value: exactly 32 bytes, lowercase,
+ * and below the group order. The previous form reduced with `modN`, which accepts
+ * `s` and `s + n` as the same proof and so accepts two encodings of one proof --
+ * malleability, narrow here (for P-256 only scalars below about 2^224 have a second
+ * 32-byte encoding) but free to refuse. Exported so the rule can be tested on the
+ * values that make it discriminate; through `checkPartialDecryption` alone, reducing
+ * and rejecting are indistinguishable for every scalar a real prover emits.
+ */
+export const canonicalProofScalar = (hex: string): bigint => {
   if (!/^[0-9a-f]{64}$/.test(hex)) {
     throw new Error('invalid proof scalar encoding');
   }

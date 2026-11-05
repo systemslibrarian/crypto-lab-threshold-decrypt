@@ -11,6 +11,7 @@ import {
   type PartialDecryption
 } from './elgamal';
 import { freeCurves, makeShamirDemo, sampleCurve, type SharePoint } from './shamirviz';
+import { uniformBelow } from './uniform';
 import {
   analyzeThresholdFailure,
   buildThresholdComparison,
@@ -139,7 +140,7 @@ const retireMessageBoundEvidence = (message: string): void => {
 // current (t, n). Called when the learner changes the scheme or asks for a reroll.
 const rebuildViz = (): void => {
   const t = Math.min(state.threshold, state.participants);
-  state.viz = buildViz(3 + Math.floor(Math.random() * 15), t, state.participants);
+  state.viz = buildViz(3 + uniformBelow(15), t, state.participants);
 };
 
 const short = (value: string, size = 18): string =>
