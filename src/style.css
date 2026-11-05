@@ -891,3 +891,12 @@ ul {
 #election-negative { border: 2px solid currentColor; padding: .75rem; }
 #election button { border-color: var(--control-line); }
 @media(max-width:640px){.election-voters { grid-template-columns: 1fr; }}
+
+/* The verified / rejected mark on a party chip, drawn here from the chip's own
+   state class rather than written as DOM text. axe 4.14 compares a control's
+   accessible name against everything a SIGHTED user sees
+   (label-content-name-mismatch, WCAG 2.5.3 Label in Name) while excluding
+   aria-hidden content from the NAME, so an aria-hidden mark inside the chip
+   can never be matched by any label. The name states the proof status instead. */
+.chip.verified::after { content: "\00A0\2713"; }
+.chip.tampered::after { content: "\00A0\2715"; }
