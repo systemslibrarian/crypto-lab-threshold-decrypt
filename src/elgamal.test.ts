@@ -25,9 +25,11 @@ describe('byte/hex helpers', () => {
     expect(hexToBytes(bytesToHex(bytes))).toEqual(bytes);
   });
 
-  it('accepts a 0x prefix and rejects odd-length hex', () => {
+  it('accepts a 0x prefix and rejects malformed hex', () => {
     expect(hexToBytes('0xff00')).toEqual(new Uint8Array([0xff, 0x00]));
     expect(() => hexToBytes('abc')).toThrow();
+    expect(() => hexToBytes('zz')).toThrow();
+    expect(() => hexToBytes('0x0g')).toThrow();
   });
 });
 
@@ -91,6 +93,40 @@ describe('Chaum-Pedersen partial-decryption proof', () => {
       proof: { ...partial.proof, responseHex: partial.proof.responseHex.slice(0, -2) + 'aa' }
     };
     expect(await verifyPartialDecryption(publicHex, c1Hex, forged)).toBe(false);
+  });
+
+  it('rejects noncanonical proof scalars instead of reducing their encodings', async () => {
+    const { publicHex, c1Hex, partial } = await setup();
+    const widenedChallenge = {
+      ...partial,
+      proof: {
+        ...partial.proof,
+        challengeHex: (BigInt(`0x${partial.proof.challengeHex}`) + P256_GROUP_ORDER).toString(16)
+      }
+    };
+    expect(await checkPartialDecryption(publicHex, c1Hex, widenedChallenge)).toEqual({
+      challengeMatches: false,
+      firstEquation: false,
+      secondEquation: false,
+      valid: false
+    });
+
+    const uppercaseResponse = {
+      ...partial,
+      proof: { ...partial.proof, responseHex: `A${partial.proof.responseHex.slice(1)}` }
+    };
+    expect(await verifyPartialDecryption(publicHex, c1Hex, uppercaseResponse)).toBe(false);
+  });
+
+  it('fails closed on malformed proof points', async () => {
+    const { publicHex, c1Hex, partial } = await setup();
+    const malformed = { ...partial, proof: { ...partial.proof, a1Hex: 'zz' } };
+    expect(await checkPartialDecryption(publicHex, c1Hex, malformed)).toEqual({
+      challengeMatches: false,
+      firstEquation: false,
+      secondEquation: false,
+      valid: false
+    });
   });
 
   it('rejects a swapped share point that does not match the proof', async () => {

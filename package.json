@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run test:maintenance && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:maintenance": "node --test tests/maintenance-controls.node.mjs",
     "test:watch": "vitest",
     "test:a11y": "playwright test",
     "test:mutations": "node scripts/check-extension-mutations.mjs"
