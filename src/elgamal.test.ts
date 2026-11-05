@@ -13,6 +13,7 @@ import {
   createPartialDecryptionWithProof,
   verifyPartialDecryption,
   checkPartialDecryption,
+  canonicalProofScalar,
   forgeSharePoint,
   pointFromHex
 } from './elgamal';
@@ -111,11 +112,38 @@ describe('Chaum-Pedersen partial-decryption proof', () => {
       valid: false
     });
 
-    const uppercaseResponse = {
-      ...partial,
-      proof: { ...partial.proof, responseHex: `A${partial.proof.responseHex.slice(1)}` }
-    };
+    // Value-PRESERVING re-encoding: uppercase a hex letter already in the string.
+    // The previous form of this case overwrote the first character with 'A', which
+    // changes the scalar as well as its case -- so it failed under the old reducing
+    // code too, and proved nothing about canonicality.
+    const response = partial.proof.responseHex;
+    const letter = response.search(/[a-f]/);
+    expect(letter).toBeGreaterThanOrEqual(0);
+    const recased = `${response.slice(0, letter)}${response[letter].toUpperCase()}${response.slice(letter + 1)}`;
+    expect(BigInt(`0x${recased}`)).toBe(BigInt(`0x${response}`));
+    const uppercaseResponse = { ...partial, proof: { ...partial.proof, responseHex: recased } };
     expect(await verifyPartialDecryption(publicHex, c1Hex, uppercaseResponse)).toBe(false);
+  });
+
+  it('reads a proof scalar as an encoding, not as a value', () => {
+    const hex = (value: bigint): string => value.toString(16).padStart(64, '0');
+
+    // Below the order: accepted, and returned without reduction.
+    expect(canonicalProofScalar(hex(P256_GROUP_ORDER - 1n))).toBe(P256_GROUP_ORDER - 1n);
+    expect(canonicalProofScalar(hex(5n))).toBe(5n);
+
+    // At or above it: refused rather than reduced. `modN` would have returned 0 and 5.
+    expect(() => canonicalProofScalar(hex(P256_GROUP_ORDER))).toThrow(/outside the P-256 group order/);
+    expect(() => canonicalProofScalar(hex(P256_GROUP_ORDER + 5n))).toThrow(/outside the P-256 group order/);
+
+    // And the encoding itself: 32 bytes, lowercase, nothing else.
+    // 5 has no hex letters, so uppercasing it changes nothing -- the case rule needs
+    // a value that has one.
+    expect(canonicalProofScalar(hex(0xabcdefn))).toBe(0xabcdefn);
+    expect(() => canonicalProofScalar(hex(0xabcdefn).toUpperCase())).toThrow(/invalid proof scalar encoding/);
+    expect(() => canonicalProofScalar(hex(5n).slice(1))).toThrow(/invalid proof scalar encoding/);
+    expect(() => canonicalProofScalar(`0${hex(5n)}`)).toThrow(/invalid proof scalar encoding/);
+    expect(() => canonicalProofScalar(`0x${hex(5n).slice(2)}`)).toThrow(/invalid proof scalar encoding/);
   });
 
   it('fails closed on malformed proof points', async () => {

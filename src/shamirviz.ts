@@ -1,3 +1,5 @@
+import { uniformBelow } from './uniform';
+
 /**
  * Small-scale Shamir secret-sharing visualization helpers.
  *
@@ -57,13 +59,15 @@ export const makeShamirDemo = (
   secret: number,
   threshold: number,
   parties: number,
-  rand: () => number = Math.random
+  // A BOUNDED draw rather than a float, because `Math.floor(rand() * 5)` is the
+  // biased shape in its own right: see src/uniform.ts.
+  draw: (bound: number) => number = uniformBelow
 ): { coeffs: number[]; shares: SharePoint[] } => {
   const coeffs = [secret];
   for (let i = 1; i < threshold; i += 1) {
     // Small non-zero masking coefficients keep the curve visibly bent without
     // running the points off a compact plotting grid.
-    coeffs.push(Math.floor(rand() * 5) - 2 || 1);
+    coeffs.push(draw(5) - 2 || 1);
   }
   const shares: SharePoint[] = [];
   for (let x = 1; x <= parties; x += 1) {
