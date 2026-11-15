@@ -684,7 +684,7 @@ const render = (): void => {
                  </figure>`
               : state.recovery && !state.recovery.ok && state.recovery.title.startsWith('Below threshold')
                 ? `<figure class="breakdown blind" aria-label="Why fewer than t shares reveal nothing">
-                     <figcaption>held terms are fixed · missing term is free</figcaption>
+                     <figcaption>held terms are fixed · missing term needs the absent share</figcaption>
                      ${[...state.cooperating]
                        .sort((a, b) => a - b)
                        .map(
@@ -693,7 +693,7 @@ const render = (): void => {
                        .join('')}
                      ${Array.from({ length: Math.max(0, state.threshold - state.cooperating.size) })
                        .map(
-                         () => `<div class="term wild"><span class="term-id">?</span><span class="term-op">λ · D <span class="mono">free — any of ~2²⁵⁶ points</span></span></div>`
+                         () => `<div class="term wild"><span class="term-id">?</span><span class="term-op">λ · D <span class="mono">unknown — computing it needs the missing share</span></span></div>`
                        )
                        .join('')}
                    </figure>`
@@ -718,7 +718,7 @@ const render = (): void => {
               : `${state.compromised} compromised ${state.compromised === 1 ? 'party' : 'parties'} now meets the threshold of ${state.threshold}; confidentiality can be broken.`
         }</p>
         <div class="grid cards">
-          <article class="card"><h3>HashiCorp Vault</h3><p>Shamir unseal splits the root key so one operator cannot unseal a sealed Vault alone.</p></article>
+          <article class="card"><h3>HashiCorp Vault</h3><p>Shamir unseal splits the <em>unseal</em> key — which encrypts the root key — so one operator cannot unseal a sealed Vault alone.</p></article>
           <article class="card"><h3>AWS CloudHSM</h3><p>Key-ceremony quorum (M-of-N) controls require multiple cooperating custodians for critical key actions.</p></article>
           <article class="card"><h3>FROST parallel</h3><p>Like FROST signing, threshold decrypt combines validated partials with Lagrange weights — never reassembling the key.</p></article>
           <article class="card"><h3>Removing “Trent”</h3><p>The classic trusted third party is replaced by t cooperating holders, each proving its step.</p></article>
@@ -1086,10 +1086,10 @@ const bind = (): void => {
         const gap = threshold - chosen.length;
         state.recovery = {
           ok: false,
-          title: 'Below threshold — information-theoretically blind',
+          title: 'Below threshold — nothing to combine',
           detail: `${chosen.length} of ${threshold} selected. The ${gap} missing ${
-            gap === 1 ? 'share is a free variable' : 'shares are free variables'
-          }: as it ranges over the curve, the recovered secret ranges over the entire group, so every plaintext is equally consistent. ${chosen.length} parties learn nothing.`
+            gap === 1 ? 'partial decryption cannot be produced' : 'partial decryptions cannot be produced'
+          } by the parties present: deriving xᵢ·c1 from the absent party's public share g^xᵢ and the ciphertext's c1 is a Diffie-Hellman problem on P-256. So the guarantee here is computational, not information-theoretic — this page publishes the group key, every public share and c1, and those together already fix the shared point uniquely. Only the bare Shamir sharing in Exhibit 0 hides its secret unconditionally. ${chosen.length} parties learn nothing.`
         };
         return;
       }

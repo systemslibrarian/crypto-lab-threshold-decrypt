@@ -436,7 +436,7 @@ test('Exhibit 4: the quorum meter agrees with the number of chips actually selec
   }
 });
 
-test('Exhibit 4: a below-threshold set fails, says why, and shows one free variable per missing share', async ({
+test('Exhibit 4: a below-threshold set fails, names the guarantee as computational, and shows one unknown term per missing share', async ({
   page
 }) => {
   const secret = 'Quorum override 4712';
@@ -453,14 +453,19 @@ test('Exhibit 4: a below-threshold set fails, says why, and shows one free varia
   await expect(resultBox(page)).toBeVisible();
   await expect(resultBox(page)).toHaveClass(/\bbad\b/);
   const text = await resultBox(page).innerText();
-  expect(text).toContain('Below threshold — information-theoretically blind');
+  expect(text).toContain('Below threshold — nothing to combine');
   expect(text).toContain(`${picked} of ${t} selected.`);
-  expect(text).toContain('free variable');
+  // The page publishes the group key, every public share and c1, so the shared
+  // point is already determined: hiding below threshold is a Diffie-Hellman
+  // assumption, not an information-theoretic one. Both halves are pinned.
+  expect(text).toContain('Diffie-Hellman problem on P-256');
+  expect(text).toContain('computational, not information-theoretic');
+  expect(text).not.toContain('every plaintext is equally consistent');
   expect(text).toContain(`${picked} parties learn nothing.`);
   // The plaintext must NOT appear anywhere on the page.
   expect(await page.locator('body').innerText()).not.toContain(secret);
 
-  // The "blind" figure accounts for every term: known ones plus free ones sum to t.
+  // The "blind" figure accounts for every term: known ones plus unknown ones sum to t.
   const blind = page.locator('.breakdown.blind');
   await expect(blind).toBeVisible();
   await expect(blind.locator('.term')).toHaveCount(t);
