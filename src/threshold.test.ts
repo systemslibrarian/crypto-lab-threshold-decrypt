@@ -74,7 +74,7 @@ describe('Distributed key generation (Feldman VSS)', () => {
 describe('Threshold decryption end-to-end', () => {
   it('recovers the plaintext from exactly t verified partials', async () => {
     const dkg = runDistributedKeyGeneration({ participants: 5, threshold: 3 });
-    const message = 'quorum reached — releasing key material';
+    const message = '\uFEFFquorum reached — releasing key material';
     const cipher = await encryptToGroupPublicKey(dkg.groupPublicKeyHex, message);
     const partials = await partialsFor(dkg, cipher.c1Hex);
 

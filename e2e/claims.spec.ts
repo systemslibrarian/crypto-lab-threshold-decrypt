@@ -528,7 +528,7 @@ test('Exhibit 4: auto-select routes around a rejected partial only after verific
 });
 
 test('Exhibit 4: t valid partials recover exactly the message that was encrypted', async ({ page }) => {
-  const secret = 'Quorum override 4712';
+  const secret = '\uFEFFQuorum override 4712 — α & β';
   const { t } = await runToPartials(page, secret);
   await page.locator('#verify-proofs').click();
   await page.locator('#select-quorum').click();

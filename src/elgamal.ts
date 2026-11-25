@@ -161,7 +161,8 @@ export const decryptWithSharedPoint = async (sharedPointHex: string, cipher: Gro
     aesKey,
     Uint8Array.from(ciphertext)
   );
-  return new TextDecoder().decode(new Uint8Array(plaintext));
+  // The encoder adds no byte-order mark. A leading U+FEFF belongs to the message.
+  return new TextDecoder('utf-8', { ignoreBOM: true }).decode(plaintext);
 };
 
 export const createPartialDecryptionWithProof = async (
